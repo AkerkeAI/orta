@@ -7,6 +7,9 @@ export interface AgentMessage {
 
 export interface AgentRequest {
   message: string;
+  toolsEnabled?: boolean;
+  toolTurns?: import('../agent/ai_provider.js').ChatMessage[];
+  pendingActions?: Record<string,unknown>[];
   locale?: Locale;
   lifeContext?: Record<string, unknown>;
   agentContext?: Record<string, unknown>;

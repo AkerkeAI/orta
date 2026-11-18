@@ -1,0 +1,1142 @@
+[
+  {
+    "name": "get_life_context",
+    "description": "Read actual locally saved life context",
+    "permission": "read",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_goals",
+    "description": "Read actual locally saved goals",
+    "permission": "read",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_exams",
+    "description": "Read actual locally saved exams",
+    "permission": "read",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_projects",
+    "description": "Read actual locally saved projects",
+    "permission": "read",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_tasks",
+    "description": "Read actual locally saved tasks",
+    "permission": "read",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_calendar_events",
+    "description": "Read actual locally saved calendar events",
+    "permission": "read",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_upcoming_deadlines",
+    "description": "Read actual locally saved upcoming deadlines",
+    "permission": "read",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_free_time",
+    "description": "Calculate confirmed available windows from saved preferences, busy events, days off, breaks and unavailable periods. Returns an explicit clarification error if availability is unknown.",
+    "permission": "read",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Exact calendar date YYYY-MM-DD; clarify ambiguous dates.",
+          "format": "date"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "study",
+            "work"
+          ]
+        }
+      },
+      "required": [
+        "date"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "create_goal",
+    "description": "Propose creating a goal. Does not execute; explicit user approval required. Omit unstated optional values.",
+    "permission": "approval",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "titleKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "User-authored goal title"
+        },
+        "areaKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Optional life area"
+        }
+      },
+      "required": [
+        "titleKey"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "update_goal",
+    "description": "Propose updating specified fields of an existing goal. Preserve unspecified fields. Requires approval.",
+    "permission": "approval",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Actual saved record ID"
+        },
+        "titleKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "User-authored goal title"
+        },
+        "areaKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Optional life area"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "create_exam",
+    "description": "Propose creating a exam. Does not execute; explicit user approval required. Omit unstated optional values.",
+    "permission": "approval",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Exact calendar date YYYY-MM-DD; clarify ambiguous dates.",
+          "format": "date"
+        },
+        "importance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Only supply when user stated a priority",
+          "enum": [
+            "low",
+            "normal",
+            "high"
+          ]
+        },
+        "preparationWanted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "date"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "update_exam",
+    "description": "Propose updating specified fields of an existing exam. Preserve unspecified fields. Requires approval.",
+    "permission": "approval",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Actual saved record ID"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Exact calendar date YYYY-MM-DD; clarify ambiguous dates.",
+          "format": "date"
+        },
+        "importance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Only supply when user stated a priority",
+          "enum": [
+            "low",
+            "normal",
+            "high"
+          ]
+        },
+        "preparationWanted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "create_project",
+    "description": "Propose creating a project. Does not execute; explicit user approval required. Omit unstated optional values.",
+    "permission": "approval",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "stage": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "needs": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "update_project",
+    "description": "Propose updating specified fields of an existing project. Preserve unspecified fields. Requires approval.",
+    "permission": "approval",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Actual saved record ID"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "stage": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "needs": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "create_task",
+    "description": "Propose creating a task. Does not execute; explicit user approval required. Omit unstated optional values.",
+    "permission": "approval",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "dueDate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Exact calendar date YYYY-MM-DD; clarify ambiguous dates.",
+          "format": "date"
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "goalId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Existing saved goal ID"
+        },
+        "examId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Existing saved exam ID"
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Existing saved project ID"
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "normal",
+            "high"
+          ]
+        },
+        "estimatedMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10080
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "update_task",
+    "description": "Propose updating specified fields of an existing task. Preserve unspecified fields. Requires approval.",
+    "permission": "approval",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Actual saved record ID"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "dueDate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Exact calendar date YYYY-MM-DD; clarify ambiguous dates.",
+          "format": "date"
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "goalId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Existing saved goal ID"
+        },
+        "examId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Existing saved exam ID"
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Existing saved project ID"
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "normal",
+            "high"
+          ]
+        },
+        "estimatedMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10080
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "create_calendar_event",
+    "description": "Propose creating a calendar_event. Does not execute; explicit user approval required. Omit unstated optional values.",
+    "permission": "approval",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Exact calendar date YYYY-MM-DD; clarify ambiguous dates.",
+          "format": "date"
+        },
+        "startTime": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "HH:mm",
+          "format": "time"
+        },
+        "endTime": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "HH:mm after startTime",
+          "format": "time"
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "goalId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "examId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "isAllDay": {
+          "type": "boolean"
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "IANA timezone; use saved confirmed timezone"
+        },
+        "planningKind": {
+          "type": "string",
+          "enum": [
+            "study",
+            "work"
+          ]
+        },
+        "latestEnd": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "time"
+        },
+        "planningDeadline": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "format": "date",
+          "description": "Explicit deadline retained from the approved planning request."
+        }
+      },
+      "required": [
+        "title",
+        "date"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "update_calendar_event",
+    "description": "Propose updating specified fields of an existing calendar_event. Preserve unspecified fields. Requires approval.",
+    "permission": "approval",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Actual saved record ID"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Exact calendar date YYYY-MM-DD; clarify ambiguous dates.",
+          "format": "date"
+        },
+        "startTime": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "HH:mm",
+          "format": "time"
+        },
+        "endTime": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "HH:mm after startTime",
+          "format": "time"
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "goalId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "examId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "isAllDay": {
+          "type": "boolean"
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "IANA timezone; use saved confirmed timezone"
+        },
+        "planningKind": {
+          "type": "string",
+          "enum": [
+            "study",
+            "work"
+          ]
+        },
+        "latestEnd": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "time"
+        },
+        "planningDeadline": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "format": "date",
+          "description": "Explicit deadline retained from the approved planning request."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "complete_task",
+    "description": "Propose marking an existing task complete. Requires approval.",
+    "permission": "approval",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Actual saved task ID"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "approve_action",
+    "description": "Resolve ONLY the specifically identified pending proposal when the CURRENT user message explicitly confirms/rejects it.",
+    "permission": "decision",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "ID of the eligible pending proposal"
+        }
+      },
+      "required": [
+        "actionId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "reject_action",
+    "description": "Resolve ONLY the specifically identified pending proposal when the CURRENT user message explicitly confirms/rejects it.",
+    "permission": "decision",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "ID of the eligible pending proposal"
+        }
+      },
+      "required": [
+        "actionId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_planning_context",
+    "description": "Read deterministic recommendations, current local date, commitments and saved planning preferences. Use for daily focus questions.",
+    "permission": "read",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "update_planning_preferences",
+    "description": "Propose changing only explicitly supplied preferences; do not invent availability. Requires approval before these preferences can be used.",
+    "permission": "approval",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "timezone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "IANA time zone supplied by the user"
+        },
+        "studyStart": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "time"
+        },
+        "studyEnd": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "time"
+        },
+        "workStart": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "time"
+        },
+        "workEnd": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "time"
+        },
+        "weekdays": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 7
+          },
+          "maxItems": 7,
+          "uniqueItems": true
+        },
+        "daysOff": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 7
+          },
+          "maxItems": 7,
+          "uniqueItems": true
+        },
+        "maxDailyMinutes": {
+          "type": "integer",
+          "minimum": 15,
+          "maximum": 720
+        },
+        "breakMinutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120
+        },
+        "sessionMinutes": {
+          "type": "integer",
+          "minimum": 15,
+          "maximum": 180
+        },
+        "notAfter": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "time"
+        },
+        "intensity": {
+          "type": "string",
+          "enum": [
+            "light",
+            "regular",
+            "intensive"
+          ]
+        },
+        "unavailable": {
+          "type": "array",
+          "maxItems": 60,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "date": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "",
+                "format": "date"
+              },
+              "startTime": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "",
+                "format": "time"
+              },
+              "endTime": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "",
+                "format": "time"
+              }
+            },
+            "required": [
+              "date",
+              "startTime",
+              "endTime"
+            ]
+          }
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "plan_sessions",
+    "description": "Calculate a realistic schedule locally and produce pending calendar proposals, not saved events. NEVER invent times with create_calendar_event for study/work plans. Ask for missing availability, preparation status or effort. Relative periods are calculated by the engine.",
+    "permission": "planning",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "User-visible activity title"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "study",
+            "work"
+          ]
+        },
+        "period": {
+          "type": "string",
+          "enum": [
+            "today",
+            "this_week",
+            "next_week",
+            "custom"
+          ]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "startDate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "date"
+        },
+        "endDate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "date"
+        },
+        "durationMinutes": {
+          "type": "integer",
+          "minimum": 15,
+          "maximum": 180
+        },
+        "notAfter": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "time"
+        },
+        "deadline": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "date"
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Existing saved record ID, never invent"
+        },
+        "examId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Existing saved record ID, never invent"
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Existing saved record ID, never invent"
+        },
+        "goalId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Existing saved record ID, never invent"
+        }
+      },
+      "required": [
+        "title",
+        "kind",
+        "period"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "reschedule_calendar_event",
+    "description": "Propose moving a saved event; preserve unspecified fields and check constraints/conflicts locally. Use weekday (1=Mon..7=Sun) to move within the same week as the original session.",
+    "permission": "planning",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "targetDate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "date"
+        },
+        "weekday": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7
+        },
+        "startTime": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "time"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "modify_pending_session",
+    "description": "Revise one specific pending session; preserve the rest of the pending group and require fresh approval for all revised suggestions. NEVER execute the old proposal.",
+    "permission": "planning",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        },
+        "targetDate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "date"
+        },
+        "weekday": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7
+        },
+        "startTime": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "",
+          "format": "time"
+        }
+      },
+      "required": [
+        "actionId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "complete_calendar_event",
+    "description": "Propose marking an actual session completed only when the user explicitly reports completion. Never mark completed just because time passed.",
+    "permission": "approval",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": ""
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "approve_actions",
+    "description": "Resolve the exact pending group only after explicit CURRENT user approve-all/reject-all confirmation.",
+    "permission": "decision",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "actionIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": ""
+          },
+          "maxItems": 8,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "actionIds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "reject_actions",
+    "description": "Resolve the exact pending group only after explicit CURRENT user approve-all/reject-all confirmation.",
+    "permission": "decision",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "actionIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": ""
+          },
+          "maxItems": 8,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "actionIds"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

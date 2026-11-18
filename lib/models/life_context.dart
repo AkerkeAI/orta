@@ -418,6 +418,7 @@ class AgentContext {
   final String? visibleSection;
   final String mode;
   final LifeContext relevantLifeContext;
+  final Map<String, dynamic> visibleData;
 
   const AgentContext({
     required this.currentScreen,
@@ -425,6 +426,7 @@ class AgentContext {
     this.currentEntityId,
     this.visibleSection,
     this.mode = 'core',
+    this.visibleData = const {},
     required this.relevantLifeContext,
   });
 
@@ -434,6 +436,7 @@ class AgentContext {
     'currentEntityId': currentEntityId,
     'visibleSection': visibleSection,
     'mode': mode,
+    'visibleData': visibleData,
     'relevantLifeContext': relevantLifeContext.toJson(),
   };
 }
@@ -478,6 +481,26 @@ class AgentMessage {
   final String text;
   final bool isUser;
   final ActionProposal? proposal;
+  final String? id;
+  final DateTime? createdAt;
 
-  const AgentMessage({required this.text, required this.isUser, this.proposal});
+  const AgentMessage({
+    required this.text,
+    required this.isUser,
+    this.proposal,
+    this.id,
+    this.createdAt,
+  });
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'text': text,
+    'isUser': isUser,
+    'createdAt': createdAt?.toIso8601String(),
+  };
+  factory AgentMessage.fromJson(Map<String, dynamic> json) => AgentMessage(
+    id: json['id'] as String,
+    text: json['text'] as String,
+    isUser: json['isUser'] as bool,
+    createdAt: DateTime.parse(json['createdAt'] as String),
+  );
 }

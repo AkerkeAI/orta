@@ -1,8 +1,24 @@
+import '../../models/life_data.dart';
+import '../../services/scheduling_engine.dart';
+import '../../services/planning_strings.dart';
+import '../../widgets/planning_views.dart';
+import '../../widgets/scheduling_preferences_dialog.dart';
+import '../../services/ai_actions.dart';
+import '../../services/action_agent.dart';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+
+import '../../services/product_strings.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../models/language.dart';
 import '../../models/life_context.dart';
+import '../../services/life_repository.dart';
+import '../../services/agent_context_builder.dart';
+import '../../services/life_data_strings.dart';
+import '../../widgets/life_record_dialog.dart';
 import '../../models/orta_models.dart';
 import '../../models/user_profile.dart';
 import '../../services/localization_service.dart';
@@ -10,21 +26,17 @@ import '../../services/orta_agent_service.dart';
 import '../../services/agent_config.dart';
 import '../../services/remote_orta_agent_service.dart';
 import '../../services/orta_localization.dart';
-import '../../services/voice_input_service.dart';
-import '../../services/orta_realtime_voice_service.dart';
 import '../../widgets/language_selector.dart';
 import '../language_orta/language_orta_screen.dart';
 
 class OrtaShell extends StatefulWidget {
-  final LifeContext lifeContext;
-  final ValueChanged<LifeContext> onContextChanged;
+  final LifeRepository repository;
   final VoidCallback onResetOnboarding;
   final AppLocale currentLocale;
 
   const OrtaShell({
     super.key,
-    required this.lifeContext,
-    required this.onContextChanged,
+    required this.repository,
     required this.onResetOnboarding,
     required this.currentLocale,
   });
@@ -37,16 +49,63 @@ class _OrtaShellState extends State<OrtaShell> {
   int _index = 0;
   bool _languageMode = false;
   String? _selectedLanguageCode;
-  late LifeContext _context;
-  final List<CalendarItem> _plan = [];
-  final List<String> _progress = [];
-  final Map<String, List<LifeMapCategory>> _languageMaps = {};
-  final Map<String, List<LanguageMemory>> _languageMemories = {};
+  LifeContext get _context => widget.repository.lifeView;
+  List<CalendarItem> get _plan =>
+      AgentContextBuilder.plan(widget.repository.data)
+          .map(
+            (item) => CalendarItem(
+              id: item.id,
+              kind: item.kind,
+              title: item.title,
+              date:
+                  item.date ??
+                  lifeDataText(_context.interfaceLanguage, 'unknownDate'),
+              category: item.category,
+              startTime: item.startTime ?? '',
+              endTime: item.endTime,
+            ),
+          )
+          .toList();
+  List<String> get _progress => [
+    ...widget.repository.data.completedTasks.map(
+      (t) =>
+          '${t.title} · ${planningDate(_context.interfaceLanguage, SchedulingEngine(widget.repository.data, nowOverride: t.completedAt).today)}',
+    ),
+    ...widget.repository.data.events
+        .where((e) => e.completedAt != null)
+        .map(
+          (e) =>
+              '${e.title} · ${planningDate(_context.interfaceLanguage, SchedulingEngine(widget.repository.data, nowOverride: e.completedAt).today)}',
+        ),
+  ];
 
-  @override
-  void initState() {
-    super.initState();
-    _context = widget.lifeContext;
+  Future<void> _save(Future<void> Function() change) async {
+    try {
+      await change();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(lifeDataText(_context.interfaceLanguage, 'error')),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _addRecord([String type = 'exam']) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) =>
+          LifeRecordDialog(repository: widget.repository, initialType: type),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(lifeDataText(_context.interfaceLanguage, 'saved')),
+        ),
+      );
+    }
   }
 
   String _label(String key) {
@@ -64,48 +123,22 @@ class _OrtaShellState extends State<OrtaShell> {
     return values[key]![index];
   }
 
-  AgentContext get _agentContext => AgentContext(
-    currentScreen: _label(['home', 'plan', 'life', 'progress'][_index]),
-    visibleSection: _index == 0 ? 'What matters now' : null,
-    relevantLifeContext: _context,
-  );
+  AgentContext _agentContext({String? type, String? id}) =>
+      AgentContextBuilder.build(
+        widget.repository.data,
+        screen: ['home', 'plan', 'life', 'progress'][_index],
+        entityType: type,
+        entityId: id,
+      );
 
-  void _applyAgentAction(AgentAction action) {
-    final name = action.arguments['name'] as String? ?? 'Exam';
-    final date = action.arguments['date'] as String? ?? 'Date to be confirmed';
-    final isPlan = action.type == 'proposeStudyPlan';
-    final exam = ExamContext(
-      id: 'exam_${DateTime.now().millisecondsSinceEpoch}',
-      name: name,
-      date: date,
-      importance: 'low',
-      preparationWanted: isPlan,
-    );
-    setState(() {
-      _context = _context.copyWith(exams: [..._context.exams, exam]);
-      _plan.add(CalendarItem(title: name, date: date, category: 'Exam'));
-      if (isPlan) {
-        _plan.add(
-          CalendarItem(
-            title: '$name preparation',
-            date: date,
-            category: 'Preparation',
-          ),
-        );
-      }
-      _progress.insert(0, '$name added to your ORTA');
-    });
-    widget.onContextChanged(_context);
-  }
-
-  void _openAgent() {
+  void _openAgent({String? type, String? id}) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => AgentSheet(
-        contextData: _agentContext,
-        onAction: _applyAgentAction,
+        repository: widget.repository,
+        contextBuilder: () => _agentContext(type: type, id: id),
         agentService: useRemoteOrtaAgent
             ? RemoteOrtaAgentService()
             : MockOrtaAgentService(),
@@ -125,13 +158,15 @@ class _OrtaShellState extends State<OrtaShell> {
                 trailing: _context.hasArea(area)
                     ? const Icon(Icons.check)
                     : null,
-                onTap: () {
-                  setState(() {
-                    final areas = {..._context.currentLifeAreas, area};
-                    _context = _context.copyWith(currentLifeAreas: areas);
-                  });
-                  widget.onContextChanged(_context);
-                  Navigator.pop(sheetContext);
+                onTap: () async {
+                  await _save(
+                    () => widget.repository.updateLife(
+                      (life) => life.copyWith(
+                        currentLifeAreas: {...life.currentLifeAreas, area},
+                      ),
+                    ),
+                  );
+                  if (sheetContext.mounted) Navigator.pop(sheetContext);
                 },
               ),
           ],
@@ -149,40 +184,71 @@ class _OrtaShellState extends State<OrtaShell> {
         ),
         languageCode:
             _selectedLanguageCode ?? _context.languages.first.languageCode,
-        lifeMap:
-            _languageMaps[_selectedLanguageCode ??
-                _context.languages.first.languageCode] ??
-            const [],
-        memories:
-            _languageMemories[_selectedLanguageCode ??
-                _context.languages.first.languageCode] ??
-            const [],
-        onAddMemory: (phrase) {
-          final code =
-              _selectedLanguageCode ?? _context.languages.first.languageCode;
-          setState(
-            () => _languageMemories[code] = [
-              ...(_languageMemories[code] ?? []),
-              LanguageMemory(
-                title: 'Moment',
-                context: 'Real life',
-                phrase: phrase,
-                meaning: 'Saved in this language space.',
-                language: code,
-              ),
-            ],
-          );
-        },
+        lifeMap: widget.repository
+            .languageProgress(
+              _selectedLanguageCode ?? _context.languages.first.languageCode,
+            )
+            .lifeMap,
+        memories: widget.repository
+            .languageProgress(
+              _selectedLanguageCode ?? _context.languages.first.languageCode,
+            )
+            .memories,
+        completedSessions: widget.repository
+            .languageProgress(
+              _selectedLanguageCode ?? _context.languages.first.languageCode,
+            )
+            .completedSessions,
+        languageLevel: widget.repository
+            .languageProgress(
+              _selectedLanguageCode ?? _context.languages.first.languageCode,
+            )
+            .level,
+        lifeContext: _context,
+        practiceHistory: widget.repository
+            .languageProgress(
+              _selectedLanguageCode ?? _context.languages.first.languageCode,
+            )
+            .practiceHistory,
+        onSavePractice: (code, topicKey, response) => widget.repository
+            .recordPractice(code, topicKey: topicKey, response: response),
+        onAddMemory: (phrase) => widget.repository.addLanguageMoment(
+          _selectedLanguageCode ?? _context.languages.first.languageCode,
+          phrase,
+        ),
         onBack: () => setState(() => _languageMode = false),
         currentLocale: widget.currentLocale,
       );
     }
     final screens = [
-      HomeView(lifeContext: _context, plan: _plan),
-      PlanView(items: _plan),
+      HomeView(
+        lifeContext: _context,
+        plan: _plan,
+        data: widget.repository.data,
+        onSelectEntity: (type, id) => _openAgent(type: type, id: id),
+      ),
+      PlanView(
+        data: widget.repository.data,
+        onPreferences: () => showDialog<void>(
+          context: context,
+          builder: (_) =>
+              SchedulingPreferencesDialog(repository: widget.repository),
+        ),
+        onCompleteSession: (id, completed) =>
+            _save(() => widget.repository.completeSession(id, completed)),
+        items: _plan,
+        tasks: widget.repository.data.tasks,
+        language: _context.interfaceLanguage,
+        onCompleteTask: (id, completed) =>
+            _save(() => widget.repository.completeTask(id, completed)),
+        onAddTask: () => _addRecord('task'),
+        onSelectEntity: (type, id) => _openAgent(type: type, id: id),
+      ),
       LifeView(
         lifeContext: _context,
         onAddArea: _addLifeArea,
+        onAddRecord: () => _addRecord(),
+        onSelectEntity: (type, id) => _openAgent(type: type, id: id),
         onAddLanguage: _addLanguage,
         onOpenLanguage: _context.languages.isEmpty
             ? null
@@ -196,9 +262,20 @@ class _OrtaShellState extends State<OrtaShell> {
         }),
         onReset: widget.onResetOnboarding,
       ),
-      ProgressView(items: _progress),
+      ProgressView(items: _progress, language: _context.interfaceLanguage),
     ];
     return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        toolbarHeight: 40,
+        actions: [
+          IconButton(
+            tooltip: productText(_context.interfaceLanguage, 'settings'),
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings_outlined),
+          ),
+        ],
+      ),
       body: Stack(
         children: [
           screens[_index],
@@ -238,38 +315,85 @@ class _OrtaShellState extends State<OrtaShell> {
     );
   }
 
+  Future<void> _openSettings() async {
+    final language = _context.interfaceLanguage;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(productText(language, 'settings')),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(productText(language, 'interfaceLanguage')),
+              for (final choice in Language.values)
+                ListTile(
+                  title: Text(choice.displayName),
+                  trailing: choice == _context.interfaceLanguage
+                      ? const Icon(Icons.check)
+                      : null,
+                  onTap: () async {
+                    await _save(
+                      () => widget.repository.updateLife(
+                        (life) => life.copyWith(interfaceLanguage: choice),
+                      ),
+                    );
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  },
+                ),
+              Text(productText(language, 'privacy')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(productText(language, 'close')),
+          ),
+        ],
+      ),
+    );
+  }
+
   UserProfile _languageProfile(String code) => UserProfile(
     name: _context.name,
     nativeLanguage: _context.interfaceLanguage,
     learningLanguage: LanguageExtension.fromCode(code),
-    level: LanguageLevelExtension.fromString(_context.languages.first.level),
-    wakeUpTime: '08:00',
-    sleepTime: '22:00',
+    level: LanguageLevelExtension.fromString(
+      widget.repository.languageProgress(code).level,
+    ),
+    wakeUpTime: _context.preferences['wakeUpTime'] ?? '',
+    sleepTime: _context.preferences['sleepTime'] ?? '',
   );
 
   void _addLanguage() {
     showDialog<String>(
       context: context,
-      builder: (_) => const LanguageSelectorDialog(),
+      builder: (_) => LanguageSelectorDialog(locale: widget.currentLocale),
     ).then((code) {
       if (!mounted ||
           code == null ||
           _context.languages.any((item) => item.languageCode == code)) {
         return;
       }
-      final next = _context.copyWith(
-        languages: [
-          ..._context.languages,
-          LanguageContext(languageCode: code, reason: 'Personal goal'),
-        ],
+      _save(
+        () => widget.repository.updateLife(
+          (life) => life.copyWith(
+            languages: [
+              ...life.languages,
+              LanguageContext(languageCode: code),
+            ],
+          ),
+        ),
       );
-      setState(() => _context = next);
-      widget.onContextChanged(next);
     });
   }
 }
 
 class CalendarItem {
+  final String? id;
+  final String kind;
   final String title;
   final String date;
   final String category;
@@ -277,10 +401,12 @@ class CalendarItem {
   final String? endTime;
   final bool isFreeWindow;
   const CalendarItem({
+    this.id,
+    this.kind = 'event',
     required this.title,
     required this.date,
     required this.category,
-    this.startTime = '09:00',
+    this.startTime = '',
     this.endTime,
     this.isFreeWindow = false,
   });
@@ -289,10 +415,21 @@ class CalendarItem {
 class HomeView extends StatelessWidget {
   final LifeContext lifeContext;
   final List<CalendarItem> plan;
-  const HomeView({super.key, required this.lifeContext, required this.plan});
+  final LifeData? data;
+  final void Function(String, String)? onSelectEntity;
+  const HomeView({
+    super.key,
+    required this.lifeContext,
+    required this.plan,
+    this.data,
+    this.onSelectEntity,
+  });
 
   @override
   Widget build(BuildContext context) {
+    if (data != null) {
+      return DailyOverview(data: data!, onSelect: onSelectEntity);
+    }
     final nextGoal = lifeContext.goals.isEmpty ? null : lifeContext.goals.first;
     return SafeArea(
       child: ListView(
@@ -337,7 +474,7 @@ class HomeView extends StatelessWidget {
           if (lifeContext.projects.isNotEmpty) ...[
             const SizedBox(height: 16),
             _SectionCard(
-              title: 'Projects',
+              title: productText(lifeContext.interfaceLanguage, 'projects'),
               child: Text(
                 lifeContext.projects.map((project) => project.name).join('\n'),
               ),
@@ -372,135 +509,52 @@ class HomeView extends StatelessWidget {
 
 class PlanView extends StatefulWidget {
   final List<CalendarItem> items;
-  const PlanView({super.key, required this.items});
+  final List<Task> tasks;
+  final LifeData? data;
+  final VoidCallback? onPreferences;
+  final Future<void> Function(String, bool)? onCompleteSession;
+  final Language language;
+  final Future<void> Function(String, bool)? onCompleteTask;
+  final VoidCallback? onAddTask;
+  final void Function(String, String)? onSelectEntity;
+  const PlanView({
+    super.key,
+    required this.items,
+    this.data,
+    this.onPreferences,
+    this.onCompleteSession,
+    this.tasks = const [],
+    this.language = Language.english,
+    this.onCompleteTask,
+    this.onAddTask,
+    this.onSelectEntity,
+  });
   @override
   State<PlanView> createState() => _PlanViewState();
 }
 
 class _PlanViewState extends State<PlanView> {
-  bool _week = false;
-  int _selectedDay = 0;
-
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: ListView(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
-      children: [
-        Text(
-          AppLocalizations.of(context).ui('plan'),
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+  Widget build(BuildContext context) => PlanningCalendar(
+    data:
+        widget.data ??
+        LifeData(
+          life: LifeContext(name: '', interfaceLanguage: widget.language),
+          tasks: widget.tasks,
         ),
-        const SizedBox(height: 8),
-        const Text(
-          'Your schedule grows from your real context.',
-          style: TextStyle(color: AppTheme.textSecondary),
-        ),
-        SegmentedButton<bool>(
-          segments: [
-            ButtonSegment(
-              value: false,
-              label: Text(AppLocalizations.of(context).ui('day')),
-            ),
-            ButtonSegment(
-              value: true,
-              label: Text(AppLocalizations.of(context).ui('week')),
-            ),
-          ],
-          selected: {_week},
-          onSelectionChanged: (value) => setState(() => _week = value.first),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 64,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: 7,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
-            itemBuilder: (_, index) => ChoiceChip(
-              label: Text(
-                [
-                  'Mon 14',
-                  'Tue 15',
-                  'Wed 16',
-                  'Thu 17',
-                  'Fri 18',
-                  'Sat 19',
-                  'Sun 20',
-                ][index],
-              ),
-              selected: _selectedDay == index,
-              onSelected: (_) => setState(() => _selectedDay = index),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          _week
-              ? AppLocalizations.of(context).ui('week')
-              : AppLocalizations.of(context).ui('timeline'),
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: AppTheme.primaryColor,
-          ),
-        ),
-        const SizedBox(height: 8),
-        if (widget.items.isEmpty)
-          const _EmptyState(
-            text: 'Your plan is clear for now. Ask ORTA to add an action.',
-          ),
-        ...widget.items.map(
-          (item) => InkWell(
-            onTap: () => showDialog<void>(
-              context: context,
-              builder: (_) => AlertDialog(
-                title: Text(item.title),
-                content: Text(
-                  '${item.startTime}${item.endTime == null ? '' : '–${item.endTime}'} · ${item.category}',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Close'),
-                  ),
-                ],
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 62,
-                  child: Text(
-                    item.startTime,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                Expanded(
-                  child: Card(
-                    color: item.isFreeWindow ? Colors.teal.shade50 : null,
-                    child: ListTile(
-                      title: Text(item.title),
-                      subtitle: Text('${item.date} · ${item.category}'),
-                      leading: Icon(
-                        item.isFreeWindow
-                            ? Icons.free_breakfast
-                            : Icons.event_outlined,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    ),
+    onCompleteTask: widget.onCompleteTask,
+    onCompleteSession: widget.onCompleteSession,
+    onAddTask: widget.onAddTask,
+    onPreferences: widget.onPreferences,
+    onSelect: widget.onSelectEntity,
   );
 }
 
 class LifeView extends StatelessWidget {
   final LifeContext lifeContext;
   final VoidCallback onAddArea;
+  final VoidCallback? onAddRecord;
+  final void Function(String, String)? onSelectEntity;
   final VoidCallback onAddLanguage;
   final VoidCallback? onOpenLanguage;
   final ValueChanged<String> onSelectLanguage;
@@ -509,6 +563,8 @@ class LifeView extends StatelessWidget {
     super.key,
     required this.lifeContext,
     required this.onAddArea,
+    this.onAddRecord,
+    this.onSelectEntity,
     required this.onAddLanguage,
     required this.onOpenLanguage,
     required this.onSelectLanguage,
@@ -520,21 +576,21 @@ class LifeView extends StatelessWidget {
     child: ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
       children: [
-        const Text(
-          'LIFE',
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+        Text(
+          productText(lifeContext.interfaceLanguage, 'life'),
+          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'This is what ORTA currently understands.',
-          style: TextStyle(color: AppTheme.textSecondary),
+        Text(
+          productText(lifeContext.interfaceLanguage, 'lifeIntro'),
+          style: const TextStyle(color: AppTheme.textSecondary),
         ),
         const SizedBox(height: 20),
         _SectionCard(
-          title: 'Current life',
+          title: productText(lifeContext.interfaceLanguage, 'currentLife'),
           child: Text(
             lifeContext.currentLifeAreas.isEmpty
-                ? 'No areas added yet.'
+                ? productText(lifeContext.interfaceLanguage, 'noAreas')
                 : lifeContext.currentLifeAreas
                       .map(
                         (area) =>
@@ -545,23 +601,40 @@ class LifeView extends StatelessWidget {
         ),
         if (lifeContext.goals.isNotEmpty)
           _SectionCard(
-            title: 'Goals',
-            child: Text(
-              lifeContext.goals
-                  .map((goal) => ortaLocalizations(context).goal(goal.titleKey))
-                  .join('\n'),
+            title: productText(lifeContext.interfaceLanguage, 'goals'),
+            child: Column(
+              children: [
+                for (final goal in lifeContext.goals)
+                  ListTile(
+                    title: Text(ortaLocalizations(context).goal(goal.titleKey)),
+                    onTap: () => onSelectEntity?.call('goal', goal.id),
+                  ),
+              ],
             ),
           ),
         if (lifeContext.universityPlans.isNotEmpty)
           _SectionCard(
-            title: 'Universities',
-            child: Text(
-              '${lifeContext.universityPlans.length} in your shortlist',
+            title: productText(lifeContext.interfaceLanguage, 'universities'),
+            child: Column(
+              children: [
+                for (final university in lifeContext.universityPlans)
+                  ListTile(
+                    title: Text(university.name),
+                    subtitle: Text(
+                      [
+                        university.country,
+                        university.program,
+                      ].where((v) => v.isNotEmpty).join(' · '),
+                    ),
+                    onTap: () =>
+                        onSelectEntity?.call('university', university.id),
+                  ),
+              ],
             ),
           ),
         if (lifeContext.career != null)
           _SectionCard(
-            title: 'Career',
+            title: productText(lifeContext.interfaceLanguage, 'career'),
             child: Text(
               [lifeContext.career!.role, lifeContext.career!.desiredDirection]
                   .whereType<String>()
@@ -569,22 +642,56 @@ class LifeView extends StatelessWidget {
                   .join(' -> '),
             ),
           ),
+        if (lifeContext.projects.isNotEmpty)
+          _SectionCard(
+            title: productText(lifeContext.interfaceLanguage, 'projects'),
+            child: Column(
+              children: [
+                for (final project in lifeContext.projects)
+                  ListTile(
+                    title: Text(project.name),
+                    onTap: () => onSelectEntity?.call('project', project.id),
+                  ),
+              ],
+            ),
+          ),
         if (lifeContext.exams.isNotEmpty)
           _SectionCard(
-            title: 'Exams',
-            child: Text(lifeContext.exams.map((exam) => exam.name).join('\n')),
+            title: productText(lifeContext.interfaceLanguage, 'exams'),
+            child: Column(
+              children: [
+                for (final exam in lifeContext.exams)
+                  ListTile(
+                    title: Text(exam.name),
+                    subtitle: Text(
+                      exam.date ??
+                          lifeDataText(
+                            lifeContext.interfaceLanguage,
+                            'unknownDate',
+                          ),
+                    ),
+                    onTap: () => onSelectEntity?.call('exam', exam.id),
+                  ),
+              ],
+            ),
           ),
         if (lifeContext.languages.isNotEmpty)
           _SectionCard(
-            title: 'Languages',
+            title: productText(lifeContext.interfaceLanguage, 'languages'),
             child: Column(
               children: lifeContext.languages
                   .map(
                     (language) => ListTile(
-                      title: Text(language.definition.englishName),
+                      title: Text(
+                        ortaLocalizations(context)
+                            .languageName(language.languageCode),
+                      ),
                       subtitle: Text(
                         language.level.isEmpty
-                            ? 'Level unknown'
+                            ? productText(
+                                lifeContext.interfaceLanguage,
+                                'unknownLevel',
+                              )
                             : language.level,
                       ),
                       trailing: const Icon(Icons.arrow_forward),
@@ -595,21 +702,31 @@ class LifeView extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 12),
+        if (onAddRecord != null)
+          OutlinedButton.icon(
+            onPressed: onAddRecord,
+            icon: const Icon(Icons.add),
+            label: Text(lifeDataText(lifeContext.interfaceLanguage, 'add')),
+          ),
         OutlinedButton.icon(
           onPressed: onAddArea,
           icon: const Icon(Icons.add),
-          label: const Text('Add life area'),
+          label: Text(productText(lifeContext.interfaceLanguage, 'addArea')),
         ),
         OutlinedButton.icon(
           onPressed: onAddLanguage,
           icon: const Icon(Icons.language),
-          label: const Text('Add language goal'),
+          label: Text(
+            productText(lifeContext.interfaceLanguage, 'addLanguage'),
+          ),
         ),
         if (onOpenLanguage != null)
           OutlinedButton.icon(
             onPressed: onOpenLanguage,
             icon: const Icon(Icons.language),
-            label: const Text('Open Language ORTA'),
+            label: Text(
+              productText(lifeContext.interfaceLanguage, 'openLanguage'),
+            ),
           ),
         const SizedBox(height: 12),
         TextButton.icon(
@@ -617,18 +734,24 @@ class LifeView extends StatelessWidget {
             final confirmed = await showDialog<bool>(
               context: context,
               builder: (dialogContext) => AlertDialog(
-                title: const Text('Reset ORTA?'),
-                content: const Text(
-                  'This clears the local LifeContext and returns to onboarding.',
+                title: Text(
+                  productText(lifeContext.interfaceLanguage, 'resetTitle'),
+                ),
+                content: Text(
+                  productText(lifeContext.interfaceLanguage, 'resetBody'),
                 ),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(dialogContext, false),
-                    child: const Text('Cancel'),
+                    child: Text(
+                      productText(lifeContext.interfaceLanguage, 'cancel'),
+                    ),
                   ),
                   ElevatedButton(
                     onPressed: () => Navigator.pop(dialogContext, true),
-                    child: const Text('Reset'),
+                    child: Text(
+                      productText(lifeContext.interfaceLanguage, 'reset'),
+                    ),
                   ),
                 ],
               ),
@@ -636,7 +759,7 @@ class LifeView extends StatelessWidget {
             if (confirmed == true) onReset();
           },
           icon: const Icon(Icons.restart_alt),
-          label: const Text('Reset ORTA'),
+          label: Text(productText(lifeContext.interfaceLanguage, 'reset')),
         ),
       ],
     ),
@@ -645,19 +768,24 @@ class LifeView extends StatelessWidget {
 
 class ProgressView extends StatelessWidget {
   final List<String> items;
-  const ProgressView({super.key, required this.items});
+  final Language language;
+  const ProgressView({
+    super.key,
+    required this.items,
+    this.language = Language.english,
+  });
   @override
   Widget build(BuildContext context) => SafeArea(
     child: ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
       children: [
-        const Text(
-          'PROGRESS',
+        Text(
+          planningText(language, 'progress'),
           style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 20),
         if (items.isEmpty)
-          const _EmptyState(text: 'Completed actions will appear here.'),
+          _EmptyState(text: planningText(language, 'unknownProgress')),
         ...items.map(
           (item) => ListTile(
             leading: const Icon(
@@ -728,13 +856,13 @@ class AgentButton extends StatelessWidget {
 }
 
 class AgentSheet extends StatefulWidget {
-  final AgentContext contextData;
-  final ValueChanged<AgentAction> onAction;
+  final AgentContext Function() contextBuilder;
+  final LifeRepository repository;
   final OrtaAgentService agentService;
   const AgentSheet({
     super.key,
-    required this.contextData,
-    required this.onAction,
+    required this.contextBuilder,
+    required this.repository,
     required this.agentService,
   });
   @override
@@ -744,66 +872,435 @@ class AgentSheet extends StatefulWidget {
 class _AgentSheetState extends State<AgentSheet> {
   final _controller = TextEditingController();
   late final OrtaAgentService _service = widget.agentService;
-  final List<AgentMessage> _messages = const [
-    AgentMessage(
-      text:
-          'I am here with the context of this screen. What should we work on?',
-      isUser: false,
-    ),
-  ].toList();
+  ToolRegistry? _registry;
+  List<AgentMessage> get _messages => widget.repository.data.conversation;
+  List<ToolProposal> get _pending => widget.repository.data.currentProposals
+      .where((p) => p.status == 'pending')
+      .toList();
+  Language get _language => widget.repository.data.life.interfaceLanguage;
+  bool _sending = false, _expanded = false;
+  String? _error, _failedText;
   AgentDraft _draft = const AgentDraft();
-  ActionProposal? _proposal;
-  bool _sending = false;
-  String? _error;
-  bool _expanded = false;
-  final VoiceInputService _voiceInput = PrototypeVoiceInputService();
 
-  Future<void> _send([String? preset]) async {
-    final text = (preset ?? _controller.text).trim();
-    if (text.isEmpty || _sending) return;
-    _controller.clear();
-    setState(() {
-      _sending = true;
-      _error = null;
-      _messages.add(AgentMessage(text: text, isUser: true));
-    });
-    try {
-      final result = await _service.respond(
-        text,
-        widget.contextData,
-        _draft,
-        conversation: _messages,
-      );
-      if (!mounted) return;
+  @override
+  void initState() {
+    super.initState();
+    _expanded = _pending.isNotEmpty;
+    widget.repository.addListener(_refresh);
+    ToolRegistry.load()
+        .then((registry) {
+          if (mounted) setState(() => _registry = registry);
+        })
+        .catchError((Object _) {
+          /* A send retries loading and reports an error safely. */
+        });
+  }
+
+  void _refresh() {
+    if (mounted) {
       setState(() {
-        _messages.add(
-          AgentMessage(
-            text: result.response,
-            isUser: false,
-            proposal: result.proposal,
-          ),
-        );
-        _draft = result.draft;
-        _proposal = result.proposal;
-        _sending = false;
-      });
-    } on RemoteAgentException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _sending = false;
-        _error = error.message;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _sending = false;
-        _error = 'ORTA could not connect right now. Try again.';
+        if (_pending.isNotEmpty) _expanded = true;
       });
     }
   }
 
+  String _summary(ToolProposal p) =>
+      _registry?.humanSummary(widget.repository.data, p.tool, p.arguments) ??
+      p.summary;
+
+  Future<void> _newConversation() async {
+    if (_sending) return;
+    try {
+      await widget.repository.newConversation();
+      _controller.clear();
+      if (mounted) {
+        setState(() {
+          _draft = const AgentDraft();
+          _error = null;
+          _failedText = null;
+          _expanded = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = productText(_language, 'newChatError'));
+      }
+    }
+  }
+
+  Future<void> _history() async {
+    if (_sending) return;
+    final language = _language;
+    final conversations = widget.repository.data.conversations.reversed
+        .toList();
+    final id = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(productText(language, 'history')),
+        content: SizedBox(
+          width: 420,
+          height: 380,
+          child: Column(
+            children: [
+              Text(productText(language, 'retention')),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: conversations.length,
+                  itemBuilder: (_, index) {
+                    final conversation = conversations[index];
+                    return ListTile(
+                      title: Text(
+                        conversation.title.isEmpty
+                            ? productText(language, 'untitled')
+                            : conversation.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: conversation.updatedAt == null
+                          ? null
+                          : Text(
+                              planningDate(
+                                language,
+                                SchedulingEngine(
+                                  widget.repository.data,
+                                  nowOverride: conversation.updatedAt,
+                                ).today,
+                              ),
+                            ),
+                      trailing:
+                          conversation.id ==
+                              widget.repository.data.activeConversationId
+                          ? const Icon(Icons.check)
+                          : null,
+                      onTap: () =>
+                          Navigator.pop(dialogContext, conversation.id),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(productText(language, 'close')),
+          ),
+        ],
+      ),
+    );
+    if (id == null || !mounted) return;
+    try {
+      await widget.repository.resumeConversation(id);
+      _controller.clear();
+      if (mounted) {
+        setState(() {
+          _draft = const AgentDraft();
+          _error = null;
+          _failedText = null;
+          _expanded = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = productText(_language, 'newChatError'));
+      }
+    }
+  }
+
+  Future<void> _send({String? text, bool retry = false}) async {
+    final message = (text ?? _controller.text).trim();
+    if (message.isEmpty || _sending) return;
+    if (message.length > 8000) {
+      setState(() => _error = productText(_language, 'tooLong'));
+      return;
+    }
+    final conversationId = widget.repository.data.activeConversationId;
+    setState(() {
+      _sending = true;
+      _error = null;
+      _failedText = null;
+    });
+    try {
+      final last = _messages.lastOrNull;
+      if (!retry || last?.isUser != true || last?.text != message) {
+        await widget.repository.appendMessage(
+          message,
+          isUser: true,
+          conversationId: conversationId,
+        );
+      }
+      _controller.clear();
+      if (widget.repository.data.activeConversationId != conversationId) return;
+      final String response;
+      if (_service is RemoteOrtaAgentService) {
+        final registry = _registry ?? await ToolRegistry.load();
+        _registry = registry;
+        response = await ActionAgent(
+          widget.repository,
+          _service,
+          registry,
+        ).respond(message, widget.contextBuilder);
+      } else {
+        final result = await _service.respond(
+          message,
+          widget.contextBuilder(),
+          _draft,
+          conversation: _messages,
+        );
+        response = result.response;
+        _draft = result.draft;
+      }
+      await widget.repository.appendMessage(
+        response,
+        isUser: false,
+        conversationId: conversationId,
+      );
+    } on RemoteAgentException catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _failedText = message;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = lifeDataText(_language, 'chatSaveError');
+          _failedText = message;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _resolve(ToolProposal proposal, bool approve) async {
+    if (_sending) return;
+    setState(() {
+      _sending = true;
+      _error = null;
+      _failedText = null;
+    });
+    final conversationId = widget.repository.data.activeConversationId;
+    Map<String, dynamic>? committed;
+    try {
+      final registry = _registry ?? await ToolRegistry.load();
+      committed = await widget.repository.resolveAction(
+        registry,
+        proposal.id,
+        approve: approve,
+      );
+      await widget.repository.appendMessage(
+        ActionAgent.resultMessage(_language, committed),
+        isUser: false,
+        conversationId: conversationId,
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = committed == null
+              ? actionText(_language, 'retry')
+              : ActionAgent.resultMessage(_language, committed),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _resolveGroup(bool approve) async {
+    if (_sending || _pending.isEmpty) return;
+    final ids = _pending.map((p) => p.id).toList();
+    final conversationId = widget.repository.data.activeConversationId;
+    setState(() {
+      _sending = true;
+      _error = null;
+      _failedText = null;
+    });
+    Map<String, dynamic>? committed;
+    try {
+      final registry = _registry ?? await ToolRegistry.load();
+      committed = await widget.repository.resolveActions(
+        registry,
+        ids,
+        approve: approve,
+      );
+      await widget.repository.appendMessage(
+        ActionAgent.resultMessage(_language, committed),
+        isUser: false,
+        conversationId: conversationId,
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = committed == null
+              ? actionText(_language, 'retry')
+              : ActionAgent.resultMessage(_language, committed),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Widget _message(AgentMessage message) => Align(
+    alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
+    child: Container(
+      key: ValueKey(message.id),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: message.isUser ? AppTheme.primaryColor : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: message.isUser
+          ? Text(message.text, style: const TextStyle(color: Colors.white))
+          : MarkdownBody(
+              data: message.text,
+              selectable: true,
+              fitContent: false,
+              styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context))
+                  .copyWith(
+                    p: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      height: 1.45,
+                    ),
+                  ),
+              // Model-provided images never trigger network or local-file reads.
+              imageBuilder: (_, _, alt) =>
+                  Text(alt ?? productText(_language, 'imageOmitted')),
+              onTapLink: (_, href, _) async {
+                final uri = Uri.tryParse(href ?? '');
+                final valid =
+                    uri != null &&
+                    ['https', 'http'].contains(uri.scheme) &&
+                    uri.host.isNotEmpty &&
+                    uri.userInfo.isEmpty;
+                if (valid) {
+                  await Clipboard.setData(ClipboardData(text: uri.toString()));
+                }
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        productText(
+                          _language,
+                          valid ? 'linkCopied' : 'linkUnavailable',
+                        ),
+                      ),
+                    ),
+                  );
+                }
+              },
+            ),
+    ),
+  );
+  Widget _proposal(ToolProposal proposal) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_summary(proposal)),
+          if (proposal.expired(DateTime.now()))
+            Text(planningText(_language, 'expired')),
+          Wrap(
+            spacing: 8,
+            children: [
+              ElevatedButton(
+                onPressed: _sending || proposal.expired(DateTime.now())
+                    ? null
+                    : () => _resolve(proposal, true),
+                child: Text(actionText(_language, 'confirm')),
+              ),
+              TextButton(
+                onPressed: _sending ? null : () => _resolve(proposal, false),
+                child: Text(actionText(_language, 'cancel')),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _content(Object entry) {
+    if (entry is AgentMessage) return _message(entry);
+    if (entry is ToolProposal) return _proposal(entry);
+    if (entry == 'loading') {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          children: [
+            const LinearProgressIndicator(),
+            const SizedBox(height: 8),
+            Text(productText(_language, 'thinking')),
+          ],
+        ),
+      );
+    }
+    if (entry == 'error') {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_error!, style: const TextStyle(color: Colors.red)),
+            if (_failedText != null)
+              TextButton(
+                onPressed: _sending
+                    ? null
+                    : () => _send(text: _failedText, retry: true),
+                child: Text(productText(_language, 'retry')),
+              ),
+          ],
+        ),
+      );
+    }
+    return Wrap(
+      spacing: 8,
+      children: [
+        ElevatedButton(
+          onPressed: _sending ? null : () => _resolveGroup(true),
+          child: Text(planningText(_language, 'approveAll')),
+        ),
+        TextButton(
+          onPressed: _sending ? null : () => _resolveGroup(false),
+          child: Text(planningText(_language, 'rejectAll')),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final entries = <Object>[
+      ..._messages,
+      if (_sending) 'loading',
+      if (_error != null) 'error',
+      ..._pending,
+      if (_pending.length > 1) 'group',
+    ];
+    final agentContext = widget.contextBuilder();
+    final rawSelectedTitle =
+        agentContext.visibleData['selectedEntityTitle'] as String?;
+    final selectedTitle =
+        rawSelectedTitle != null && agentContext.currentEntityType == 'goal'
+        ? AppLocalizations(AppLocaleExtension.fromLanguage(_language))
+              .goal(rawSelectedTitle)
+        : rawSelectedTitle;
+    final screen =
+        [
+          'home',
+          'life',
+          'plan',
+          'progress',
+        ].contains(agentContext.currentScreen)
+        ? agentContext.currentScreen
+        : 'home';
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -813,16 +1310,18 @@ class _AgentSheetState extends State<AgentSheet> {
           color: Theme.of(context).scaffoldBackgroundColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * (_expanded ? .92 : .42),
+            height:
+                MediaQuery.sizeOf(context).height *
+                (_expanded || keyboard ? .94 : .52),
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
                       const Text(
-                        'ORTA Agent',
+                        'ORTA',
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -830,137 +1329,73 @@ class _AgentSheetState extends State<AgentSheet> {
                       ),
                       const Spacer(),
                       IconButton(
+                        tooltip: productText(_language, 'newChat'),
+                        onPressed: _sending ? null : _newConversation,
+                        icon: const Icon(Icons.add_comment_outlined),
+                      ),
+                      IconButton(
+                        tooltip: productText(_language, 'history'),
+                        onPressed: _sending ? null : _history,
+                        icon: const Icon(Icons.history),
+                      ),
+                      IconButton(
+                        tooltip: productText(
+                          _language,
+                          _expanded ? 'collapse' : 'expand',
+                        ),
                         onPressed: () => setState(() => _expanded = !_expanded),
                         icon: Icon(
                           _expanded ? Icons.unfold_less : Icons.open_in_full,
                         ),
-                        tooltip: _expanded ? 'Collapse' : 'Expand',
                       ),
                       IconButton(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const OrtaVoiceScreen(),
-                          ),
-                        ),
-                        icon: const Icon(Icons.call_outlined),
-                        tooltip: 'Voice prototype',
-                      ),
-                      IconButton(
+                        tooltip: productText(_language, 'close'),
                         onPressed: () => Navigator.pop(context),
                         icon: const Icon(Icons.close),
                       ),
                     ],
                   ),
                   Text(
-                    widget.contextData.currentScreen,
+                    productText(
+                      _language,
+                      'viewing',
+                      name: selectedTitle ?? productText(_language, screen),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: AppTheme.textSecondary),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Expanded(
-                    child: ListView(
-                      children: _messages
-                          .map(
-                            (message) => Align(
-                              alignment: message.isUser
-                                  ? Alignment.centerRight
-                                  : Alignment.centerLeft,
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 10),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: message.isUser
-                                      ? AppTheme.primaryColor
-                                      : Colors.white,
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                child: Text(
-                                  message.text,
-                                  style: TextStyle(
-                                    color: message.isUser
-                                        ? Colors.white
-                                        : AppTheme.textPrimary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
+                    child: entries.isEmpty
+                        ? Center(child: Text(productText(_language, 'welcome')))
+                        : ListView.builder(
+                            reverse: true,
+                            itemCount: entries.length,
+                            itemBuilder: (_, index) =>
+                                _content(entries[entries.length - 1 - index]),
+                          ),
                   ),
-                  if (_sending)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 8),
-                      child: LinearProgressIndicator(),
-                    ),
-                  if (_error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        _error!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  if (_proposal != null)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _proposal!.title,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(_proposal!.description),
-                            const SizedBox(height: 8),
-                            ElevatedButton(
-                              onPressed: () {
-                                widget.onAction(_proposal!.action);
-                                setState(() => _proposal = null);
-                              },
-                              child: const Text('CONFIRM'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
                         child: TextField(
                           controller: _controller,
-                          onSubmitted: (_) => _send(),
-                          decoration: const InputDecoration(
-                            hintText: 'Ask ORTA',
+                          minLines: 1,
+                          maxLines: keyboard ? 1 : 4,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (text) => _send(text: text),
+                          decoration: InputDecoration(
+                            hintText: productText(_language, 'message'),
                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
                       IconButton(
-                        onPressed: _send,
+                        tooltip: productText(_language, 'send'),
+                        onPressed: _sending ? null : () => _send(),
                         icon: const Icon(Icons.send),
-                      ),
-                      IconButton(
-                        onPressed: () async {
-                          final messenger = ScaffoldMessenger.of(context);
-                          final result = await _voiceInput.startListening();
-                          if (!mounted) return;
-                          if (result == null) {
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Voice input is not connected in this prototype.',
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.mic_none),
-                        tooltip: 'Voice input',
                       ),
                     ],
                   ),
@@ -975,45 +1410,8 @@ class _AgentSheetState extends State<AgentSheet> {
 
   @override
   void dispose() {
+    widget.repository.removeListener(_refresh);
     _controller.dispose();
     super.dispose();
-  }
-}
-
-class OrtaVoiceScreen extends StatelessWidget {
-  const OrtaVoiceScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    final voiceService = PrototypeRealtimeVoiceService();
-    return Scaffold(
-      appBar: AppBar(title: const Text('ORTA')),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.graphic_eq,
-              size: 72,
-              color: AppTheme.primaryColor,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Ready',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Realtime voice is not connected in this prototype (${voiceService.state.name}).',
-            ),
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.call_end),
-              label: const Text('End call'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

@@ -25,6 +25,7 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
+  final _scrollController = ScrollController();
   final _nameController = TextEditingController();
   final _otherController = TextEditingController();
   final _interpreter = MockLifeContextInterpreter();
@@ -35,76 +36,36 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   List<GoalContext> _suggestions = [];
   final Set<String> _selectedGoals = {};
 
-  String get _languageLabel {
-    switch (_interfaceLanguage) {
-      case Language.russian:
-        return 'Русский';
-      case Language.kazakh:
-        return 'Қазақша';
-      case Language.english:
-        return 'English';
-    }
+  bool _nameInvalid = false;
+  bool _lifeInvalid = false;
+  bool _goalsGenerated = false;
+
+  AppLocalizations get _strings =>
+      AppLocalizations(AppLocaleExtension.fromLanguage(_interfaceLanguage));
+
+  String t(String key) => _strings.get('life_onboarding_$key');
+
+  @override
+  void initState() {
+    super.initState();
+    _interfaceLanguage = LanguageExtension.fromCode(
+      widget.currentLocale.languageCode,
+    );
   }
 
-  String t(String key) {
-    const en = {
-      'welcome': 'Tell ORTA where you are now and where you want to go.',
-      'name': 'What should ORTA call you?',
-      'language': 'Choose your interface language',
-      'life': 'What does your life look like right now?',
-      'lifeHint': 'Choose all that apply.',
-      'other': 'Describe your situation',
-      'interpret': 'ORTA thinks these may describe your situation:',
-      'goals': 'What would you like to move forward?',
-      'summary': 'This is how ORTA understands your life.',
-      'build': 'Build my ORTA',
-      'continue': 'Continue',
-      'back': 'Back',
-      'skip': 'Skip for now',
-      'otherGoal': 'Other goal',
-    };
-    const ru = {
-      'welcome': 'Расскажите ORTA, где вы сейчас и куда хотите прийти.',
-      'name': 'Как ORTA может к вам обращаться?',
-      'language': 'Выберите язык интерфейса',
-      'life': 'Как сейчас выглядит ваша жизнь?',
-      'lifeHint': 'Выберите все подходящие варианты.',
-      'other': 'Опишите вашу ситуацию',
-      'interpret': 'ORTA думает, что вас могут описывать:',
-      'goals': 'К чему вы хотите продвинуться?',
-      'summary': 'Так ORTA понимает вашу жизнь.',
-      'build': 'Создать мой ORTA',
-      'continue': 'Продолжить',
-      'back': 'Назад',
-      'skip': 'Пропустить пока',
-      'otherGoal': 'Другая цель',
-    };
-    const kk = {
-      'welcome': 'ORTA-ға қазір қайда екеніңізді және қайда барғыңыз келетінін айтыңыз.',
-      'name': 'ORTA сізге қалай айтуы керек?',
-      'language': 'Интерфейс тілін таңдаңыз',
-      'life': 'Қазір өміріңіз қалай көрінеді?',
-      'lifeHint': 'Сәйкес келетіннің бәрін таңдаңыз.',
-      'other': 'Жағдайыңызды сипаттаңыз',
-      'interpret': 'ORTA сіздің жағдайыңызды былай түсінуі мүмкін:',
-      'goals': 'Нені алға жылжытқыңыз келеді?',
-      'summary': 'ORTA сіздің өміріңізді осылай түсінеді.',
-      'build': 'Менің ORTA-ымды құру',
-      'continue': 'Жалғастыру',
-      'back': 'Артқа',
-      'skip': 'Әзірге өткізу',
-      'otherGoal': 'Басқа мақсат',
-    };
-    final map = _interfaceLanguage == Language.russian
-        ? ru
-        : _interfaceLanguage == Language.kazakh
-        ? kk
-        : en;
-    return map[key] ?? key;
+  @override
+  void didUpdateWidget(OnboardingScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentLocale != widget.currentLocale) {
+      _interfaceLanguage = LanguageExtension.fromCode(
+        widget.currentLocale.languageCode,
+      );
+    }
   }
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _nameController.dispose();
     _otherController.dispose();
     super.dispose();
@@ -115,34 +76,55 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     widget.onLocaleChange(language);
   }
 
+  void _goToStep(int step) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+    setState(() => _step = step);
+  }
+
   void _next() {
-    if (_step == 1 && _nameController.text.trim().isEmpty) return;
-    if (_step == 3 && _areas.isEmpty) return;
-    if (_step == 3 &&
-        _areas.contains(LifeArea.other) &&
-        _otherController.text.trim().isNotEmpty) {
-      _interpretation = _interpreter.interpret(_otherController.text);
+    if (_step == 1 && _nameController.text.trim().isEmpty) {
+      setState(() => _nameInvalid = true);
+      return;
     }
-    if (_step == 4) {
+    if (_step == 3 && _areas.isEmpty) {
+      setState(() => _lifeInvalid = true);
+      return;
+    }
+    if (_step == 3) {
+      _interpretation =
+          _areas.contains(LifeArea.other) &&
+              _otherController.text.trim().isNotEmpty
+          ? _interpreter.interpret(_otherController.text)
+          : [];
       final draft = LifeContext(
         name: _nameController.text.trim(),
         interfaceLanguage: _interfaceLanguage,
-        currentLifeAreas: _areas,
-        otherDescription: _otherController.text.trim(),
+        currentLifeAreas: Set.of(_areas),
+        otherDescription: _areas.contains(LifeArea.other)
+            ? _otherController.text.trim()
+            : '',
         interpretedSuggestions: _interpretation,
       );
       _suggestions = GoalSuggestionService.suggestionsFor(draft);
-      _selectedGoals.addAll(_suggestions.take(3).map((goal) => goal.id));
+      // Revisiting Life keeps deliberate goal choices, and removes stale goals.
+      _selectedGoals.retainAll(_suggestions.map((goal) => goal.id));
+      if (!_goalsGenerated) {
+        _selectedGoals.addAll(_suggestions.take(3).map((goal) => goal.id));
+        _goalsGenerated = true;
+      }
     }
-    if (_step < 6) setState(() => _step++);
+    if (_step < 5) _goToStep(_step + 1);
   }
 
   void _finish() {
     final draft = LifeContext(
       name: _nameController.text.trim(),
       interfaceLanguage: _interfaceLanguage,
-      currentLifeAreas: _areas,
-      otherDescription: _otherController.text.trim(),
+      currentLifeAreas: Set.of(_areas),
+      otherDescription: _areas.contains(LifeArea.other)
+          ? _otherController.text.trim()
+          : '',
       interpretedSuggestions: _interpretation,
       goals: _suggestions
           .where((goal) => _selectedGoals.contains(goal.id))
@@ -174,18 +156,40 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         ),
                       ),
                       const Spacer(),
-                      Text(
-                        _languageLabel,
-                        style: const TextStyle(color: AppTheme.textSecondary),
+                      PopupMenuButton<Language>(
+                        tooltip: _strings.get('interface_language'),
+                        initialValue: _interfaceLanguage,
+                        onSelected: _setLanguage,
+                        itemBuilder: (_) => [
+                          for (final language in Language.values)
+                            PopupMenuItem(
+                              value: language,
+                              child: Text(language.displayName),
+                            ),
+                        ],
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            _interfaceLanguage.displayName,
+                            style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 32),
-                  Expanded(child: SingleChildScrollView(child: _body())),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      child: _body(),
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   if (_step > 0)
                     TextButton(
-                      onPressed: () => setState(() => _step--),
+                      onPressed: () => _goToStep(_step - 1),
                       child: Text(t('back')),
                     ),
                   if (_step < 5)
@@ -244,7 +248,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     TextField(
       controller: _nameController,
       autofocus: true,
-      decoration: const InputDecoration(hintText: 'Your name or nickname'),
+      textCapitalization: TextCapitalization.words,
+      textInputAction: TextInputAction.next,
+      onSubmitted: (_) => _next(),
+      onChanged: (_) {
+        if (_nameInvalid) setState(() => _nameInvalid = false);
+      },
+      decoration: InputDecoration(
+        hintText: t('nameHint'),
+        errorText: _nameInvalid ? _strings.onboardingNameError : null,
+      ),
     ),
   );
 
@@ -263,15 +276,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         },
         child: Column(
           children: [
-            for (final entry in const [
-              (Language.english, 'English'),
-              (Language.russian, 'Русский'),
-              (Language.kazakh, 'Қазақша'),
-            ])
+            for (final language in Language.values)
               Card(
                 child: RadioListTile<Language>(
-                  value: entry.$1,
-                  title: Text(entry.$2),
+                  value: language,
+                  title: Text(language.displayName),
                 ),
               ),
           ],
@@ -292,14 +301,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         t('lifeHint'),
         style: const TextStyle(color: AppTheme.textSecondary),
       ),
+      if (_lifeInvalid)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            t('lifeError'),
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ),
       const SizedBox(height: 16),
       for (final area in LifeArea.values)
         CheckboxListTile(
           value: _areas.contains(area),
-          title: Text(ortaLocalizations(context).lifeArea(area)),
+          title: Text(_strings.lifeArea(area)),
           contentPadding: EdgeInsets.zero,
-          onChanged: (value) =>
-              setState(() => value! ? _areas.add(area) : _areas.remove(area)),
+          onChanged: (value) => setState(() {
+            if (value == true) {
+              _areas.add(area);
+            } else {
+              _areas.remove(area);
+              if (area == LifeArea.other) _interpretation = [];
+            }
+            _lifeInvalid = false;
+          }),
         ),
       if (_areas.contains(LifeArea.other)) ...[
         const SizedBox(height: 8),
@@ -317,13 +341,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           Wrap(
             spacing: 8,
             children: _interpretation
-                .map(
-                  (item) => Chip(
-                    label: Text(
-                      ortaLocalizations(context).interpretation(item),
-                    ),
-                  ),
-                )
+                .map((item) => Chip(label: Text(_strings.interpretation(item))))
                 .toList(),
           ),
         ],
@@ -338,12 +356,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         t('goals'),
         style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
       ),
+      const SizedBox(height: 8),
+      Text(t('goalsHint')),
       const SizedBox(height: 16),
       for (final goal in _suggestions)
         CheckboxListTile(
           value: _selectedGoals.contains(goal.id),
-          title: Text(ortaLocalizations(context).goal(goal.titleKey)),
-          subtitle: Text(ortaLocalizations(context).lifeDomain(goal.areaKey)),
+          title: Text(_strings.goal(goal.titleKey)),
+          subtitle: Text(_strings.lifeDomain(goal.areaKey)),
           contentPadding: EdgeInsets.zero,
           onChanged: (value) => setState(
             () => value!
@@ -369,24 +389,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       const SizedBox(height: 20),
       if (_areas.isNotEmpty)
         _summarySection(
-          'LIFE',
-          _areas
-              .map((area) => ortaLocalizations(context).lifeArea(area))
-              .join(' · '),
+          t('summaryLife'),
+          _areas.map((area) => _strings.lifeArea(area)).join(' · '),
         ),
       if (_selectedGoals.isNotEmpty)
         _summarySection(
-          'GOALS',
+          t('summaryGoals'),
           _suggestions
               .where((goal) => _selectedGoals.contains(goal.id))
-              .map((goal) => ortaLocalizations(context).goal(goal.titleKey))
+              .map((goal) => _strings.goal(goal.titleKey))
               .join(' · '),
         ),
+      if (_selectedGoals.isEmpty) Text(t('noGoals')),
+      if (_areas.contains(LifeArea.other) &&
+          _otherController.text.trim().isNotEmpty)
+        _summarySection(t('summaryNotes'), _otherController.text.trim()),
       if (_interpretation.isNotEmpty)
         _summarySection(
-          'NOTES',
+          t('interpret'),
           _interpretation
-              .map((item) => ortaLocalizations(context).interpretation(item))
+              .map((item) => _strings.interpretation(item))
               .join(' · '),
         ),
     ],

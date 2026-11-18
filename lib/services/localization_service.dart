@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+
 import '../models/language.dart';
 
-enum AppLocale {
-  english,
-  russian,
-  kazakh,
-}
+enum AppLocale { english, russian, kazakh }
 
 extension AppLocaleExtension on AppLocale {
   String get languageCode {
@@ -52,38 +49,100 @@ class AppLocalizations {
 
   static AppLocalizations of(BuildContext context) {
     return AppLocalizations(
-      AppLocaleExtension.fromLanguageCode(Localizations.localeOf(context).languageCode),
+      AppLocaleExtension.fromLanguageCode(
+        Localizations.localeOf(context).languageCode,
+      ),
     );
   }
 
   static const Map<AppLocale, Map<String, String>> _translations = {
     AppLocale.english: {
+      // Shared onboarding, recovery, and language selection.
+      "interface_language": "Interface language",
+      "select_language": "Select a language",
+      "search_languages": "Search languages…",
+      "no_languages": "No matching languages.",
+      "cancel": "Cancel",
+      "retry": "Retry",
+      "data_load_error": "ORTA could not load your saved data. It has not been reset. Please retry.",
+      "data_save_error": "Could not save your information. Please try again.",
+      "data_reset_error": "Could not reset saved data. Please try again.",
+      "life_onboarding_welcome":
+          "Tell ORTA where you are now and where you want to go.",
+      "life_onboarding_name": "What should ORTA call you?",
+      "life_onboarding_nameHint": "Your name or nickname",
+      "life_onboarding_language": "Choose your interface language",
+      "life_onboarding_life": "What does your life look like right now?",
+      "life_onboarding_lifeHint": "Choose all that apply.",
+      "life_onboarding_lifeError": "Choose at least one area, or select Other.",
+      "life_onboarding_other": "Describe your situation",
+      "life_onboarding_interpret": "These may describe your situation:",
+      "life_onboarding_goals": "What would you like to move forward?",
+      "life_onboarding_goalsHint":
+          "Choose the goals you want to start with. You can change them later.",
+      "life_onboarding_summary": "This is how ORTA understands your life.",
+      "life_onboarding_build": "Build my ORTA",
+      "life_onboarding_continue": "Continue",
+      "life_onboarding_back": "Back",
+      "life_onboarding_summaryLife": "LIFE",
+      "life_onboarding_summaryGoals": "GOALS",
+      "life_onboarding_summaryNotes": "NOTES",
+      "life_onboarding_noGoals": "You can add goals later.",
+      "language_en": "English",
+      "language_kk": "Kazakh",
+      "language_ru": "Russian",
+      "language_it": "Italian",
+      "language_de": "German",
+      "language_fr": "French",
+      "language_es": "Spanish",
+      "language_pt": "Portuguese",
+      "language_zh": "Chinese (Mandarin)",
+      "language_ja": "Japanese",
+      "language_ko": "Korean",
+      "language_ar": "Arabic",
+      "language_tr": "Turkish",
+      "language_pl": "Polish",
+      "language_nl": "Dutch",
+      "language_sv": "Swedish",
+      "language_no": "Norwegian",
+      "language_fi": "Finnish",
+      "language_da": "Danish",
+      "language_cs": "Czech",
+      "language_el": "Greek",
+      "language_hi": "Hindi",
+      "language_id": "Indonesian",
+      "language_vi": "Vietnamese",
+      "language_th": "Thai",
+      "language_uk": "Ukrainian",
       // App
       'app_name': 'ORTA',
       'about_orta_title': 'About ORTA',
-      'about_orta_description': 'ORTA helps you learn a language by bringing small language interactions into your everyday life.',
+      'about_orta_description': 'ORTA is your personal assistant for everyday life, goals, plans, and language practice.',
       'version': 'Version',
-      
+
       // Navigation
       'nav_home': 'Home',
       'nav_ai': 'AI',
       'nav_library': 'Library',
       'nav_settings': 'Settings',
-      
+
       // Onboarding
       'onboarding_welcome_title': 'ORTA',
       'onboarding_welcome_subtitle': 'Learn a language by living with it.',
       'onboarding_continue': 'Continue',
       'onboarding_back': 'Back',
       'onboarding_native_language': 'What is your native language?',
-      'onboarding_native_language_subtitle': 'Select the language you speak fluently.',
+      'onboarding_native_language_subtitle':
+          'Select the language you speak fluently.',
       'onboarding_learning_language': 'What language do you want to learn?',
-      'onboarding_learning_language_subtitle': 'Select the language you want to practice.',
+      'onboarding_learning_language_subtitle':
+          'Select the language you want to practice.',
       'onboarding_name': 'What should ORTA call you?',
       'onboarding_name_subtitle': 'Enter your name or nickname.',
       'onboarding_name_hint': 'Your name',
       'onboarding_level': 'What is your current level?',
-      'onboarding_level_subtitle': 'Select your approximate level in the language you want to learn.',
+      'onboarding_level_subtitle':
+          'Select your approximate level in the language you want to learn.',
       'onboarding_wake_time': 'When are you usually awake?',
       'onboarding_wake_time_subtitle': 'ORTA will use this to send language interactions during appropriate hours.',
       'onboarding_wake_up': 'Wake-up time',
@@ -93,16 +152,17 @@ class AppLocalizations {
       'onboarding_start': 'Start ORTA',
       'onboarding_name_error': 'Please enter your name',
       'onboarding_ai_assessment': 'AI Level Assessment',
-      'onboarding_ai_assessment_placeholder': 'AI level assessment will be available soon.',
+      'onboarding_ai_assessment_placeholder':
+          'AI level assessment will be available soon.',
       'onboarding_ok': 'OK',
-      
+
       // Summary
       'summary_name': 'Name',
       'summary_native_language': 'Native language',
       'summary_learning_language': 'Learning language',
       'summary_level': 'Level',
       'summary_not_selected': 'Not selected',
-      
+
       // Home
       'home_good_morning': 'Good morning',
       'home_good_afternoon': 'Good afternoon',
@@ -127,18 +187,18 @@ class AppLocalizations {
       'home_this_week': 'This week',
       'home_conversation_with_orta': 'Conversation with ORTA',
       'home_completed': 'completed',
-      
+
       // AI Chat
       'ai_chat_title': 'AI Chat',
       'ai_message_hint': 'Type a message...',
       'ai_task_greeting': 'Great. Look around you and describe three things you can see. Don\'t worry about mistakes — I\'ll help you.',
-      
+
       // Library
       'library_coming_soon': 'Library is coming soon',
       'library_stories': 'Stories adapted to your level',
       'library_articles': 'Articles and reading content',
       'library_exercises': 'Interactive reading exercises',
-      
+
       // Settings
       'settings_profile': 'Profile',
       'settings_name': 'Name',
@@ -159,11 +219,11 @@ class AppLocalizations {
       'settings_cancel': 'Cancel',
       'settings_reset': 'Reset',
       'settings_close': 'Close',
-      
+
       // Responses
       'response_well': 'Well',
       'response_not_great': 'Not great',
-      
+
       // Levels
       'level_a0': 'A0 — Beginner',
       'level_a1': 'A1',
@@ -174,34 +234,96 @@ class AppLocalizations {
       'level_c2': 'C2',
       'level_unknown': 'I don\'t know my level',
       'level_mastery': 'Mastery achieved',
-      
+
       // Languages
       'lang_english': 'English',
       'lang_kazakh': 'Қазақша',
       'lang_russian': 'Русский',
     },
     AppLocale.russian: {
+      // Shared onboarding, recovery, and language selection.
+      "interface_language": "Язык интерфейса",
+      "select_language": "Выберите язык",
+      "search_languages": "Поиск языков…",
+      "no_languages": "Подходящие языки не найдены.",
+      "cancel": "Отмена",
+      "retry": "Повторить",
+      "data_load_error": "ORTA не удалось загрузить сохранённые данные. Они не были удалены. Попробуйте ещё раз.",
+      "data_save_error":
+          "Не удалось сохранить вашу информацию. Попробуйте ещё раз.",
+      "data_reset_error":
+          "Не удалось сбросить сохранённые данные. Попробуйте ещё раз.",
+      "life_onboarding_welcome":
+          "Расскажите ORTA, где вы сейчас и куда хотите прийти.",
+      "life_onboarding_name": "Как ORTA может к вам обращаться?",
+      "life_onboarding_nameHint": "Ваше имя или никнейм",
+      "life_onboarding_language": "Выберите язык интерфейса",
+      "life_onboarding_life": "Как сейчас выглядит ваша жизнь?",
+      "life_onboarding_lifeHint": "Выберите все подходящие варианты.",
+      "life_onboarding_lifeError":
+          "Выберите хотя бы одну сферу или пункт «Другое».",
+      "life_onboarding_other": "Опишите вашу ситуацию",
+      "life_onboarding_interpret": "Возможно, это описывает вашу ситуацию:",
+      "life_onboarding_goals": "К чему вы хотите продвинуться?",
+      "life_onboarding_goalsHint":
+          "Выберите цели, с которых хотите начать. Их можно изменить позже.",
+      "life_onboarding_summary": "Так ORTA понимает вашу жизнь.",
+      "life_onboarding_build": "Создать мой ORTA",
+      "life_onboarding_continue": "Продолжить",
+      "life_onboarding_back": "Назад",
+      "life_onboarding_summaryLife": "ЖИЗНЬ",
+      "life_onboarding_summaryGoals": "ЦЕЛИ",
+      "life_onboarding_summaryNotes": "ЗАМЕТКИ",
+      "life_onboarding_noGoals": "Вы сможете добавить цели позже.",
+      "language_en": "Английский",
+      "language_kk": "Казахский",
+      "language_ru": "Русский",
+      "language_it": "Итальянский",
+      "language_de": "Немецкий",
+      "language_fr": "Французский",
+      "language_es": "Испанский",
+      "language_pt": "Португальский",
+      "language_zh": "Китайский (мандаринский)",
+      "language_ja": "Японский",
+      "language_ko": "Корейский",
+      "language_ar": "Арабский",
+      "language_tr": "Турецкий",
+      "language_pl": "Польский",
+      "language_nl": "Нидерландский",
+      "language_sv": "Шведский",
+      "language_no": "Норвежский",
+      "language_fi": "Финский",
+      "language_da": "Датский",
+      "language_cs": "Чешский",
+      "language_el": "Греческий",
+      "language_hi": "Хинди",
+      "language_id": "Индонезийский",
+      "language_vi": "Вьетнамский",
+      "language_th": "Тайский",
+      "language_uk": "Украинский",
       // App
       'app_name': 'ORTA',
       'about_orta_title': 'О ORTA',
-      'about_orta_description': 'ORTA помогает вам изучать язык, внося небольшие языковые взаимодействия в вашу повседневную жизнь.',
+      'about_orta_description': 'ORTA — ваш личный помощник в повседневной жизни, целях, планах и языковой практике.',
       'version': 'Версия',
-      
+
       // Navigation
       'nav_home': 'Главная',
       'nav_ai': 'ИИ',
       'nav_library': 'Библиотека',
       'nav_settings': 'Настройки',
-      
+
       // Onboarding
       'onboarding_welcome_title': 'ORTA',
       'onboarding_welcome_subtitle': 'Изучайте язык, живя им.',
       'onboarding_continue': 'Продолжить',
       'onboarding_back': 'Назад',
       'onboarding_native_language': 'Какой ваш родной язык?',
-      'onboarding_native_language_subtitle': 'Выберите язык, которым вы владеете свободно.',
+      'onboarding_native_language_subtitle':
+          'Выберите язык, которым вы владеете свободно.',
       'onboarding_learning_language': 'Какой язык вы хотите изучать?',
-      'onboarding_learning_language_subtitle': 'Выберите язык, который вы хотите практиковать.',
+      'onboarding_learning_language_subtitle':
+          'Выберите язык, который вы хотите практиковать.',
       'onboarding_name': 'Как ORTA может к вам обращаться?',
       'onboarding_name_subtitle': 'Введите ваше имя или никнейм.',
       'onboarding_name_hint': 'Ваше имя',
@@ -216,16 +338,17 @@ class AppLocalizations {
       'onboarding_start': 'Начать ORTA',
       'onboarding_name_error': 'Пожалуйста, введите ваше имя',
       'onboarding_ai_assessment': 'Оценка уровня ИИ',
-      'onboarding_ai_assessment_placeholder': 'Оценка уровня ИИ будет доступна в ближайшее время.',
+      'onboarding_ai_assessment_placeholder':
+          'Оценка уровня ИИ будет доступна в ближайшее время.',
       'onboarding_ok': 'ОК',
-      
+
       // Summary
       'summary_name': 'Имя',
       'summary_native_language': 'Родной язык',
       'summary_learning_language': 'Изучаемый язык',
       'summary_level': 'Уровень',
       'summary_not_selected': 'Не выбран',
-      
+
       // Home
       'home_good_morning': 'Доброе утро',
       'home_good_afternoon': 'Добрый день',
@@ -250,18 +373,18 @@ class AppLocalizations {
       'home_this_week': 'На этой неделе',
       'home_conversation_with_orta': 'Разговор с ORTA',
       'home_completed': 'выполнено',
-      
+
       // AI Chat
       'ai_chat_title': 'Чат с ИИ',
       'ai_message_hint': 'Введите сообщение...',
       'ai_task_greeting': 'Отлично. Посмотрите вокруг и опишите три вещи, которые вы видите. Не переживайте о ошибках — я помогу вам.',
-      
+
       // Library
       'library_coming_soon': 'Библиотека скоро появится',
       'library_stories': 'Истории, адаптированные под ваш уровень',
       'library_articles': 'Статьи и материалы для чтения',
       'library_exercises': 'Интерактивные упражнения для чтения',
-      
+
       // Settings
       'settings_profile': 'Профиль',
       'settings_name': 'Имя',
@@ -275,18 +398,18 @@ class AppLocalizations {
       'settings_enable_interactions': 'Включить взаимодействия ORTA',
       'settings_app': 'Приложение',
       'settings_about_orta': 'О ORTA',
-      'settings_reset_onboarding': 'Сбросить onboard',
+      'settings_reset_onboarding': 'Пройти настройку заново',
       'settings_reset_subtitle': 'Очистить все данные и начать заново',
-      'settings_reset_confirmation': 'Сбросить onboard',
-      'settings_reset_message': 'Это очистит все ваши данные и вернет вас к процессу onboard. Вы уверены?',
+      'settings_reset_confirmation': 'Пройти настройку заново',
+      'settings_reset_message': 'Это удалит все ваши данные и вернёт вас к первоначальной настройке. Продолжить?',
       'settings_cancel': 'Отмена',
       'settings_reset': 'Сбросить',
       'settings_close': 'Закрыть',
-      
+
       // Responses
       'response_well': 'Хорошо',
       'response_not_great': 'Не очень',
-      
+
       // Levels
       'level_a0': 'A0 — Начинающий',
       'level_a1': 'A1',
@@ -297,40 +420,102 @@ class AppLocalizations {
       'level_c2': 'C2',
       'level_unknown': 'Я не знаю свой уровень',
       'level_mastery': 'Мастерство достигнуто',
-      
+
       // Languages
       'lang_english': 'English',
       'lang_kazakh': 'Қазақша',
       'lang_russian': 'Русский',
     },
     AppLocale.kazakh: {
+      // Shared onboarding, recovery, and language selection.
+      "interface_language": "Интерфейс тілі",
+      "select_language": "Тілді таңдаңыз",
+      "search_languages": "Тілдерді іздеу…",
+      "no_languages": "Сәйкес тілдер табылмады.",
+      "cancel": "Болдырмау",
+      "retry": "Қайталау",
+      "data_load_error": "ORTA сақталған деректерді жүктей алмады. Деректер жойылған жоқ. Қайта көріңіз.",
+      "data_save_error": "Ақпаратыңызды сақтау мүмкін болмады. Қайта көріңіз.",
+      "data_reset_error":
+          "Сақталған деректерді қалпына келтіру мүмкін болмады. Қайта көріңіз.",
+      "life_onboarding_welcome":
+          "ORTA-ға қазіргі жағдайыңыз бен алға қойған мақсатыңызды айтыңыз.",
+      "life_onboarding_name": "ORTA сізге қалай жүгінсін?",
+      "life_onboarding_nameHint": "Атыңыз немесе лақап атыңыз",
+      "life_onboarding_language": "Интерфейс тілін таңдаңыз",
+      "life_onboarding_life": "Қазіргі өміріңіз қандай?",
+      "life_onboarding_lifeHint": "Сәйкес келетін барлық нұсқаны таңдаңыз.",
+      "life_onboarding_lifeError":
+          "Кемінде бір саланы немесе «Басқа» нұсқасын таңдаңыз.",
+      "life_onboarding_other": "Жағдайыңызды сипаттаңыз",
+      "life_onboarding_interpret": "Мыналар жағдайыңызды сипаттауы мүмкін:",
+      "life_onboarding_goals": "Қай бағытта алға жылжығыңыз келеді?",
+      "life_onboarding_goalsHint":
+          "Бастапқы мақсаттарыңызды таңдаңыз. Оларды кейін өзгерте аласыз.",
+      "life_onboarding_summary": "ORTA өміріңізді осылай түсінеді.",
+      "life_onboarding_build": "Менің ORTA-ымды құру",
+      "life_onboarding_continue": "Жалғастыру",
+      "life_onboarding_back": "Артқа",
+      "life_onboarding_summaryLife": "ӨМІР",
+      "life_onboarding_summaryGoals": "МАҚСАТТАР",
+      "life_onboarding_summaryNotes": "ЖАЗБАЛАР",
+      "life_onboarding_noGoals": "Мақсаттарды кейін қоса аласыз.",
+      "language_en": "Ағылшын тілі",
+      "language_kk": "Қазақ тілі",
+      "language_ru": "Орыс тілі",
+      "language_it": "Итальян тілі",
+      "language_de": "Неміс тілі",
+      "language_fr": "Француз тілі",
+      "language_es": "Испан тілі",
+      "language_pt": "Португал тілі",
+      "language_zh": "Қытай тілі (мандарин)",
+      "language_ja": "Жапон тілі",
+      "language_ko": "Корей тілі",
+      "language_ar": "Араб тілі",
+      "language_tr": "Түрік тілі",
+      "language_pl": "Поляк тілі",
+      "language_nl": "Нидерланд тілі",
+      "language_sv": "Швед тілі",
+      "language_no": "Норвег тілі",
+      "language_fi": "Фин тілі",
+      "language_da": "Дат тілі",
+      "language_cs": "Чех тілі",
+      "language_el": "Грек тілі",
+      "language_hi": "Хинди тілі",
+      "language_id": "Индонезия тілі",
+      "language_vi": "Вьетнам тілі",
+      "language_th": "Тай тілі",
+      "language_uk": "Украин тілі",
       // App
       'app_name': 'ORTA',
       'about_orta_title': 'ORTA туралы',
-      'about_orta_description': 'ORTA сізге тілді оқып үйренуге күнделікті өміріңізге кішкентай тілдік әрекеттерді енгізу арқылы көмектеседі.',
+      'about_orta_description': 'ORTA — күнделікті өмір, мақсаттар, жоспарлар және тіл үйрену үшін жеке көмекшіңіз.',
       'version': 'Нұсқа',
-      
+
       // Navigation
       'nav_home': 'Басты бет',
       'nav_ai': 'ЖИ',
       'nav_library': 'Кітапхана',
       'nav_settings': 'Баптаулар',
-      
+
       // Onboarding
       'onboarding_welcome_title': 'ORTA',
       'onboarding_welcome_subtitle': 'Тілді өмір сүру арқылы үйреніңіз.',
       'onboarding_continue': 'Жалғастыру',
       'onboarding_back': 'Артқа',
       'onboarding_native_language': 'Ана тіліңіз қандай?',
-      'onboarding_native_language_subtitle': 'Еркін сөйлейтін тіліңізді таңдаңыз.',
+      'onboarding_native_language_subtitle':
+          'Еркін сөйлейтін тіліңізді таңдаңыз.',
       'onboarding_learning_language': 'Қандай тілді үйренгіңіз келеді?',
-      'onboarding_learning_language_subtitle': 'Практика жасағыңыз келетін тілді таңдаңыз.',
-      'onboarding_name': 'ORTA сізге қалай айтуы керек?',
+      'onboarding_learning_language_subtitle':
+          'Практика жасағыңыз келетін тілді таңдаңыз.',
+      'onboarding_name': 'ORTA сізге қалай жүгінсін?',
       'onboarding_name_subtitle': 'Атыңызды немесе никнейміңізді енгізіңіз.',
       'onboarding_name_hint': 'Атыңыз',
       'onboarding_level': 'Қазіргі деңгейіңіз қандай?',
-      'onboarding_level_subtitle': 'Үйренгіңіз келетін тілдегі шамамен деңгейіңізді таңдаңыз.',
-      'onboarding_wake_time': 'Сіз әдетте қашан ояласыз?',
+      'onboarding_level_subtitle':
+          'Үйренгіңіз келетін тілдегі шамамен деңгейіңізді таңдаңыз.',
+      'onboarding_wake_time': 'Әдетте қай уақытта ояу боласыз?',
       'onboarding_wake_time_subtitle': 'ORTA бұл мәліметті тиімді уақытта тілдік әрекеттер жіберу үшін қолданады.',
       'onboarding_wake_up': 'Ояну уақыты',
       'onboarding_sleep': 'Ұйқы уақыты',
@@ -339,16 +524,17 @@ class AppLocalizations {
       'onboarding_start': 'ORTA-ны бастау',
       'onboarding_name_error': 'Атыңызды енгізіңіз',
       'onboarding_ai_assessment': 'ЖИ деңгейін бағалау',
-      'onboarding_ai_assessment_placeholder': 'ЖИ деңгейін бағалау жақында қолжетімді болады.',
+      'onboarding_ai_assessment_placeholder':
+          'ЖИ деңгейін бағалау жақында қолжетімді болады.',
       'onboarding_ok': 'OK',
-      
+
       // Summary
       'summary_name': 'Аты',
       'summary_native_language': 'Ана тілі',
       'summary_learning_language': 'Үйренетін тіл',
       'summary_level': 'Деңгей',
       'summary_not_selected': 'Таңдалмаған',
-      
+
       // Home
       'home_good_morning': 'Қайырлы таң',
       'home_good_afternoon': 'Қайырлы күн',
@@ -373,18 +559,18 @@ class AppLocalizations {
       'home_this_week': 'Бұл апта',
       'home_conversation_with_orta': 'ORTA-мен сөйлесу',
       'home_completed': 'орындалды',
-      
+
       // AI Chat
       'ai_chat_title': 'ЖИ чаты',
       'ai_message_hint': 'Хабарлама енгізіңіз...',
       'ai_task_greeting': 'Үлкен. Айналасыңызға қарап, көрген үш нәрсені сипаттаңыз. қателер туралы алаңдамаңыз — мен көмектесемін.',
-      
+
       // Library
       'library_coming_soon': 'Кітапхана жақында пайда болады',
       'library_stories': 'Деңгейіңізге бейімделген әңгімелер',
       'library_articles': 'Мақалалар және оқу материалдары',
       'library_exercises': 'Интерактивті оқу жаттығулары',
-      
+
       // Settings
       'settings_profile': 'Профиль',
       'settings_name': 'Аты',
@@ -398,18 +584,18 @@ class AppLocalizations {
       'settings_enable_interactions': 'ORTA әрекеттерін қосу',
       'settings_app': 'Қолданба',
       'settings_about_orta': 'ORTA туралы',
-      'settings_reset_onboarding': 'Onboard-ды қайта орнату',
-      'settings_reset_subtitle': 'Барлық деректірді жою және бастау',
-      'settings_reset_confirmation': 'Onboard-ды қайта орнату',
-      'settings_reset_message': 'Бұл барлық деректеріңізді жояды және сізді onboard процесіне қайтарады. Сенімдісіз бе?',
+      'settings_reset_onboarding': 'Бастапқы баптауды қайта өту',
+      'settings_reset_subtitle': 'Барлық деректерді жою және қайта бастау',
+      'settings_reset_confirmation': 'Бастапқы баптауды қайта өту',
+      'settings_reset_message': 'Бұл барлық деректеріңізді жойып, бастапқы баптауға қайтарады. Жалғастырасыз ба?',
       'settings_cancel': 'Болдырмау',
       'settings_reset': 'Қайта орнату',
       'settings_close': 'Жабу',
-      
+
       // Responses
       'response_well': 'Жақсы',
       'response_not_great': 'Қанағатсыз',
-      
+
       // Levels
       'level_a0': 'A0 — Бастаушы',
       'level_a1': 'A1',
@@ -420,7 +606,7 @@ class AppLocalizations {
       'level_c2': 'C2',
       'level_unknown': 'Деңгейімді білмеймін',
       'level_mastery': 'Шеберлік қол жеткізілді',
-      
+
       // Languages
       'lang_english': 'English',
       'lang_kazakh': 'Қазақша',
@@ -428,30 +614,44 @@ class AppLocalizations {
     },
   };
 
+  /// Every supported locale must contain every application key.
+  static Set<String> get translationKeys =>
+      _translations.values.expand((values) => values.keys).toSet();
+
+  bool hasTranslation(String key) =>
+      _translations[locale]?.containsKey(key) ?? false;
+
+  String languageName(String code) =>
+      hasTranslation('language_$code') ? get('language_$code') : code;
+
   String get(String key) {
-    return _translations[locale]?[key] ?? _translations[AppLocale.english]?[key] ?? key;
+    return _translations[locale]?[key] ??
+        _translations[AppLocale.english]?[key] ??
+        key;
   }
 
   String get appName => get('app_name');
   String get aboutOrtaTitle => get('about_orta_title');
   String get aboutOrtaDescription => get('about_orta_description');
   String get version => get('version');
-  
+
   // Navigation
   String get navHome => get('nav_home');
   String get navAi => get('nav_ai');
   String get navLibrary => get('nav_library');
   String get navSettings => get('nav_settings');
-  
+
   // Onboarding
   String get onboardingWelcomeTitle => get('onboarding_welcome_title');
   String get onboardingWelcomeSubtitle => get('onboarding_welcome_subtitle');
   String get onboardingContinue => get('onboarding_continue');
   String get onboardingBack => get('onboarding_back');
   String get onboardingNativeLanguage => get('onboarding_native_language');
-  String get onboardingNativeLanguageSubtitle => get('onboarding_native_language_subtitle');
+  String get onboardingNativeLanguageSubtitle =>
+      get('onboarding_native_language_subtitle');
   String get onboardingLearningLanguage => get('onboarding_learning_language');
-  String get onboardingLearningLanguageSubtitle => get('onboarding_learning_language_subtitle');
+  String get onboardingLearningLanguageSubtitle =>
+      get('onboarding_learning_language_subtitle');
   String get onboardingName => get('onboarding_name');
   String get onboardingNameSubtitle => get('onboarding_name_subtitle');
   String get onboardingNameHint => get('onboarding_name_hint');
@@ -466,16 +666,17 @@ class AppLocalizations {
   String get onboardingStart => get('onboarding_start');
   String get onboardingNameError => get('onboarding_name_error');
   String get onboardingAiAssessment => get('onboarding_ai_assessment');
-  String get onboardingAiAssessmentPlaceholder => get('onboarding_ai_assessment_placeholder');
+  String get onboardingAiAssessmentPlaceholder =>
+      get('onboarding_ai_assessment_placeholder');
   String get onboardingOk => get('onboarding_ok');
-  
+
   // Summary
   String get summaryName => get('summary_name');
   String get summaryNativeLanguage => get('summary_native_language');
   String get summaryLearningLanguage => get('summary_learning_language');
   String get summaryLevel => get('summary_level');
   String get summaryNotSelected => get('summary_not_selected');
-  
+
   // Home
   String get homeGoodMorning => get('home_good_morning');
   String get homeGoodAfternoon => get('home_good_afternoon');
@@ -489,7 +690,8 @@ class AppLocalizations {
   String get homeWords => get('home_words');
   String get homeConversations => get('home_conversations');
   String get homeWeeklyConversation => get('home_weekly_conversation');
-  String get homeWeeklyConversationProgress => get('home_weekly_conversation_progress');
+  String get homeWeeklyConversationProgress =>
+      get('home_weekly_conversation_progress');
   String get homeOrtaToday => get('home_orta_today');
   String get homeMorningCheckin => get('home_morning_checkin');
   String get homeHowDidYouSleep => get('home_how_did_you_sleep');
@@ -500,18 +702,18 @@ class AppLocalizations {
   String get homeThisWeek => get('home_this_week');
   String get homeConversationWithOrta => get('home_conversation_with_orta');
   String get homeCompleted => get('home_completed');
-  
+
   // AI Chat
   String get aiChatTitle => get('ai_chat_title');
   String get aiMessageHint => get('ai_message_hint');
   String get aiTaskGreeting => get('ai_task_greeting');
-  
+
   // Library
   String get libraryComingSoon => get('library_coming_soon');
   String get libraryStories => get('library_stories');
   String get libraryArticles => get('library_articles');
   String get libraryExercises => get('library_exercises');
-  
+
   // Settings
   String get settingsProfile => get('settings_profile');
   String get settingsName => get('settings_name');
@@ -532,11 +734,11 @@ class AppLocalizations {
   String get settingsCancel => get('settings_cancel');
   String get settingsReset => get('settings_reset');
   String get settingsClose => get('settings_close');
-  
+
   // Responses
   String get responseWell => get('response_well');
   String get responseNotGreat => get('response_not_great');
-  
+
   // Levels
   String get levelA0 => get('level_a0');
   String get levelA1 => get('level_a1');
@@ -547,7 +749,7 @@ class AppLocalizations {
   String get levelC2 => get('level_c2');
   String get levelUnknown => get('level_unknown');
   String get levelMastery => get('level_mastery');
-  
+
   // Languages
   String get langEnglish => get('lang_english');
   String get langKazakh => get('lang_kazakh');
@@ -564,9 +766,11 @@ class AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
 
   @override
   Future<AppLocalizations> load(Locale locale) async {
-    return SynchronousFuture<AppLocalizations>(AppLocalizations(
-      AppLocaleExtension.fromLanguageCode(locale.languageCode),
-    ));
+    return SynchronousFuture<AppLocalizations>(
+      AppLocalizations(
+        AppLocaleExtension.fromLanguageCode(locale.languageCode),
+      ),
+    );
   }
 
   @override

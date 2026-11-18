@@ -96,7 +96,7 @@ extension OrtaSemanticLocalization on AppLocalizations {
         'Жұмыс істеймін',
         'Өзін-өзі жұмыспен қамтыған / Фрилансер',
         'Бизнес немесе жоба құрып жатырмын',
-        'Gap year',
+        'Оқудан бір жылдық үзіліс',
         'Басқа',
       ],
     };
@@ -113,6 +113,9 @@ extension OrtaSemanticLocalization on AppLocalizations {
           'project': 'project',
           'gapYear': 'personal',
           'other': 'personal',
+          'projects': 'project',
+          'languages': 'language',
+          'personalGoals': 'personal',
         }[key] ??
         key;
     final labels = locale == AppLocale.russian
@@ -122,6 +125,8 @@ extension OrtaSemanticLocalization on AppLocalizations {
             'project': 'Проекты',
             'language': 'Языки',
             'personal': 'Личные цели',
+            'business': 'Бизнес',
+            'exams': 'Экзамены',
           }
         : locale == AppLocale.kazakh
         ? {
@@ -130,6 +135,8 @@ extension OrtaSemanticLocalization on AppLocalizations {
             'project': 'Жобалар',
             'language': 'Тілдер',
             'personal': 'Жеке мақсаттар',
+            'business': 'Бизнес',
+            'exams': 'Емтихандар',
           }
         : {
             'education': 'Education',
@@ -137,6 +144,8 @@ extension OrtaSemanticLocalization on AppLocalizations {
             'project': 'Projects',
             'language': 'Languages',
             'personal': 'Personal goals',
+            'business': 'Business',
+            'exams': 'Exams',
           };
     return labels[domainKey] ?? domainKey;
   }
@@ -180,6 +189,7 @@ extension OrtaSemanticLocalization on AppLocalizations {
       'gap_project': 'Build a project',
       'other_personal': 'Make progress in my current situation',
       'other_goal': 'Other goal',
+      'language_keep': 'Keep practicing a language',
     };
     const ru = {
       'school_university': 'Поступить в университет',
@@ -219,6 +229,7 @@ extension OrtaSemanticLocalization on AppLocalizations {
       'gap_project': 'Создать проект',
       'other_personal': 'Продвинуться в текущей ситуации',
       'other_goal': 'Другая цель',
+      'language_keep': 'Продолжать языковую практику',
     };
     const kk = {
       'school_university': 'Университетке түсу',
@@ -258,6 +269,7 @@ extension OrtaSemanticLocalization on AppLocalizations {
       'gap_project': 'Жоба құру',
       'other_personal': 'Қазіргі жағдайымда алға жылжу',
       'other_goal': 'Басқа мақсат',
+      'language_keep': 'Тілдік практиканы жалғастыру',
     };
     return (locale == AppLocale.russian
             ? ru
@@ -270,27 +282,27 @@ extension OrtaSemanticLocalization on AppLocalizations {
   String interpretation(String key) {
     const en = {
       'gap_year': 'Gap year',
-      'preparing_university': 'Preparing for university',
-      'portfolio_development': 'Portfolio development',
-      'work_experience': 'Work experience',
-      'project_development': 'Project development',
-      'personal_development': 'Personal development',
+      'preparing_university': 'Education or admission plans',
+      'portfolio_development': 'Portfolio or creative plans',
+      'work_experience': 'Work or career',
+      'project_development': 'Project or business plans',
+      'personal_development': 'Current situation',
     };
     const ru = {
       'gap_year': 'Год перерыва',
-      'preparing_university': 'Подготовка к университету',
-      'portfolio_development': 'Развитие портфолио',
-      'work_experience': 'Опыт работы',
-      'project_development': 'Развитие проекта',
-      'personal_development': 'Личное развитие',
+      'preparing_university': 'Учёба или планы поступления',
+      'portfolio_development': 'Портфолио или творческие планы',
+      'work_experience': 'Работа или карьера',
+      'project_development': 'Проект или бизнес-планы',
+      'personal_development': 'Текущая ситуация',
     };
     const kk = {
-      'gap_year': 'Gap year',
-      'preparing_university': 'Университетке дайындық',
-      'portfolio_development': 'Портфолионы дамыту',
-      'work_experience': 'Жұмыс тәжірибесі',
-      'project_development': 'Жобаны дамыту',
-      'personal_development': 'Жеке даму',
+      'gap_year': 'Оқудан бір жылдық үзіліс',
+      'preparing_university': 'Оқу немесе оқуға түсу жоспарлары',
+      'portfolio_development': 'Портфолио немесе шығармашылық жоспарлар',
+      'work_experience': 'Жұмыс немесе мансап',
+      'project_development': 'Жоба немесе бизнес жоспарлары',
+      'personal_development': 'Қазіргі жағдай',
     };
     return (locale == AppLocale.russian
             ? ru

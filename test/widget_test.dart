@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:orta/main.dart';
 import 'package:orta/models/language.dart';
 import 'package:orta/models/life_context.dart';
+import 'package:orta/models/life_data.dart';
 import 'package:orta/screens/core/orta_shell.dart';
 import 'package:orta/services/goal_suggestion_service.dart';
 import 'package:orta/services/life_context_interpreter.dart';
@@ -11,6 +14,13 @@ import 'package:orta/services/localization_service.dart';
 import 'package:orta/services/orta_agent_service.dart';
 import 'package:orta/services/orta_localization.dart';
 import 'package:orta/services/storage_service.dart';
+
+class _ReadyStorage extends StorageService {
+  final LifeData restored;
+  _ReadyStorage(this.restored);
+  @override
+  Future<LifeData> loadLifeData() async => restored;
+}
 
 LifeContext contextFor(
   Set<LifeArea> areas, {
@@ -23,6 +33,15 @@ LifeContext contextFor(
 );
 
 void main() {
+  late Directory testDirectory;
+  setUp(() async {
+    testDirectory = await Directory.systemTemp.createTemp(
+      'orta-widget-storage-',
+    );
+  });
+  tearDown(() async {
+    await testDirectory.delete(recursive: true);
+  });
   test('goal suggestions combine life areas without duplicates', () {
     final context = contextFor({LifeArea.university, LifeArea.project});
     final suggestions = GoalSuggestionService.suggestionsFor(context);
@@ -112,7 +131,7 @@ void main() {
 
   test('LifeContext persistence survives a reload', () async {
     SharedPreferences.setMockInitialValues({});
-    final storage = StorageService();
+    final storage = StorageService(directory: testDirectory);
     final context = contextFor(
       {LifeArea.work},
       goals: const [
@@ -166,7 +185,10 @@ void main() {
       'life_context': '{"name":"Akerke","interfaceLanguage":"en","currentLifeAreas":["work"],"goals":[]}',
     });
 
-    await tester.pumpWidget(const OrtaAppWrapper());
+    final restored = await tester.runAsync(
+      () => StorageService(directory: testDirectory).loadLifeData(),
+    );
+    await tester.pumpWidget(OrtaAppWrapper(storage: _ReadyStorage(restored!)));
     await tester.pumpAndSettle();
 
     expect(find.text('HOME'), findsOneWidget);
