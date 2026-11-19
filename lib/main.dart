@@ -11,6 +11,8 @@ import 'services/language_orta_access.dart';
 import 'services/language_orta_store.dart';
 import 'services/language_practice_ai.dart';
 import 'services/localization_service.dart';
+import 'services/admissions_strings.dart';
+import 'services/interface_language.dart';
 import 'services/storage_service.dart';
 
 bool _supabaseConfigured = false;
@@ -32,6 +34,23 @@ class OrtaAppWrapper extends StatelessWidget {
   final LifeDataStorage? storage;
 
   @override
+  Widget build(BuildContext context) => _AppLocaleHost(storage: storage);
+}
+
+Locale? _activeAppLocale;
+
+class _AppLocaleHost extends StatefulWidget {
+  const _AppLocaleHost({this.storage});
+  final LifeDataStorage? storage;
+
+  @override
+  State<_AppLocaleHost> createState() => _AppLocaleHostState();
+}
+
+class _AppLocaleHostState extends State<_AppLocaleHost> {
+  void _setLocale(Locale? locale) => setState(() => _activeAppLocale = locale);
+
+  @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'ORTA Admissions',
     theme: AppTheme.lightTheme,
@@ -43,19 +62,124 @@ class OrtaAppWrapper extends StatelessWidget {
       GlobalCupertinoLocalizations.delegate,
     ],
     supportedLocales: const [Locale('en'), Locale('ru'), Locale('kk')],
-    home: storage != null
-        ? OrtaApp(storage: storage)
-        : const _AdmissionsEntry(),
+    locale: _activeAppLocale,
+    home: widget.storage != null
+        ? OrtaApp(storage: widget.storage!)
+        : _AdmissionsEntry(onLocaleChanged: _setLocale),
   );
 }
 
-class _AdmissionsEntry extends StatelessWidget {
-  const _AdmissionsEntry();
+class _AdmissionsEntry extends StatefulWidget {
+  const _AdmissionsEntry({required this.onLocaleChanged});
+  final ValueChanged<Locale?> onLocaleChanged;
+
+  @override
+  State<_AdmissionsEntry> createState() => _AdmissionsEntryState();
+}
+
+class _AdmissionsEntryState extends State<_AdmissionsEntry> {
+  String? _loadedUserId;
+  Map<String, dynamic>? _loadedProfile;
+  int _profileLoadAttempt = 0;
+
+  void _syncLocale(Locale? locale) {
+    if (locale == null) return;
+    final profile = _loadedProfile;
+    if (profile != null) {
+      _loadedProfile = {...profile, 'interface_language': locale.languageCode};
+    }
+    widget.onLocaleChanged(locale);
+  }
 
   @override
   Widget build(BuildContext context) {
     if (!_supabaseConfigured) return const _ConfigurationRequired();
-    return const _SupabaseAuthGate();
+    return StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        final userId = Supabase.instance.client.auth.currentUser?.id;
+        if (userId == null) {
+          _loadedUserId = null;
+          _loadedProfile = null;
+          _activeAppLocale = null;
+          return _SignInPage(onLocaleChanged: widget.onLocaleChanged);
+        }
+        if (_loadedUserId == userId &&
+            _loadedProfile != null &&
+            _activeAppLocale != null) {
+          return _RoleWorkspace(
+            key: ValueKey(
+              'workspace-$userId-${_activeAppLocale!.languageCode}',
+            ),
+            profile: _loadedProfile!,
+            onLocaleChanged: _syncLocale,
+          );
+        }
+        return FutureBuilder<Map<String, dynamic>>(
+          key: ValueKey('profile-$userId-$_profileLoadAttempt'),
+          future: Supabase.instance.client
+              .from('profiles')
+              .select('role, full_name, interface_language')
+              .eq('id', userId)
+              .single(),
+          builder: (context, profileSnapshot) {
+            if (profileSnapshot.hasError) {
+              return Scaffold(
+                body: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          AdmissionsStrings(
+                            AppLocaleExtension.fromLanguageCode(
+                              _activeAppLocale?.languageCode ?? 'en',
+                            ),
+                          ).text('profileError'),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton(
+                          onPressed: () =>
+                              setState(() => _profileLoadAttempt++),
+                          child: Text(
+                            AdmissionsStrings(
+                              AppLocaleExtension.fromLanguageCode(
+                                _activeAppLocale?.languageCode ?? 'en',
+                              ),
+                            ).text('retry'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+            if (!profileSnapshot.hasData) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+            final profile = profileSnapshot.data!;
+            final locale = interfaceLocaleFromProfile(profile);
+            final language = LanguageExtension.fromCode(locale.languageCode);
+            _loadedUserId = userId;
+            _loadedProfile = profile;
+            _activeAppLocale = locale;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _syncLocale(_activeAppLocale);
+            });
+            return _RoleWorkspace(
+              key: ValueKey('workspace-$userId-${language.code}'),
+              profile: profile,
+              onLocaleChanged: _syncLocale,
+            );
+          },
+        );
+      },
+    );
   }
 }
 
@@ -63,32 +187,24 @@ class _ConfigurationRequired extends StatelessWidget {
   const _ConfigurationRequired();
 
   @override
-  Widget build(BuildContext context) => const Scaffold(
-    body: Center(
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Text('ORTA requires Supabase configuration to sign in.'),
+  Widget build(BuildContext context) {
+    final locale = AppLocaleExtension.fromLanguageCode(
+      Localizations.localeOf(context).languageCode,
+    );
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(AdmissionsStrings(locale).text('setup')),
+        ),
       ),
-    ),
-  );
-}
-
-class _SupabaseAuthGate extends StatelessWidget {
-  const _SupabaseAuthGate();
-
-  @override
-  Widget build(BuildContext context) => StreamBuilder<AuthState>(
-    stream: Supabase.instance.client.auth.onAuthStateChange,
-    builder: (context, snapshot) {
-      final session = Supabase.instance.client.auth.currentSession;
-      if (session == null) return const _SignInPage();
-      return _RoleWorkspace(userId: session.user.id);
-    },
-  );
+    );
+  }
 }
 
 class _SignInPage extends StatefulWidget {
-  const _SignInPage();
+  const _SignInPage({required this.onLocaleChanged});
+  final ValueChanged<Locale?> onLocaleChanged;
 
   @override
   State<_SignInPage> createState() => _SignInPageState();
@@ -103,6 +219,9 @@ class _SignInPageState extends State<_SignInPage> {
   Language _interfaceLanguage = Language.english;
   bool _busy = false;
   String? _message;
+
+  AdmissionsStrings get _strings =>
+      AdmissionsStrings(AppLocaleExtension.fromLanguage(_interfaceLanguage));
 
   Future<void> _submit() async {
     setState(() {
@@ -126,7 +245,7 @@ class _SignInPageState extends State<_SignInPage> {
           },
         );
         if (mounted) {
-          setState(() => _message = 'Check your email to verify your account.');
+          setState(() => _message = _strings.text('checkEmail'));
         }
       } else {
         await auth.signInWithPassword(
@@ -134,14 +253,11 @@ class _SignInPageState extends State<_SignInPage> {
           password: _password.text,
         );
       }
-    } on AuthException catch (error) {
-      if (mounted) setState(() => _message = error.message);
+    } on AuthException catch (_) {
+      if (mounted) setState(() => _message = _strings.text('signInFailed'));
     } catch (_) {
       if (mounted) {
-        setState(
-          () =>
-              _message = 'Could not connect. Check your details and try again.',
-        );
+        setState(() => _message = _strings.text('connectionError'));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -193,8 +309,8 @@ class _SignInPageState extends State<_SignInPage> {
                     const SizedBox(height: 5),
                     Text(
                       _register
-                          ? 'Join your admissions workspace'
-                          : 'Your admissions journey, together',
+                          ? _strings.text('join')
+                          : _strings.text('welcome'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 13,
@@ -202,50 +318,49 @@ class _SignInPageState extends State<_SignInPage> {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    DropdownButtonFormField<Language>(
+                      initialValue: _interfaceLanguage,
+                      decoration: InputDecoration(
+                        labelText: _strings.text('language'),
+                      ),
+                      items: [
+                        for (final language in Language.values)
+                          DropdownMenuItem(
+                            value: language,
+                            child: Text(language.displayName),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _interfaceLanguage = value);
+                        widget.onLocaleChanged(Locale(value.code));
+                      },
+                    ),
+                    const SizedBox(height: 12),
                     if (_register) ...[
                       TextField(
                         controller: _name,
-                        decoration: const InputDecoration(
-                          labelText: 'Full name',
+                        decoration: InputDecoration(
+                          labelText: _strings.text('name'),
                           prefixIcon: Icon(Icons.person_outline),
                         ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _invite,
-                        decoration: const InputDecoration(
-                          labelText: 'ORTA invitation code',
-                          helperText:
-                              'Enter the code sent by your ORTA Founder.',
+                        decoration: InputDecoration(
+                          labelText: _strings.text('invite'),
+                          helperText: _strings.text('inviteHelp'),
                           prefixIcon: Icon(Icons.key_outlined),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<Language>(
-                        initialValue: _interfaceLanguage,
-                        decoration: const InputDecoration(
-                          labelText: 'Interface language',
-                        ),
-                        items: [
-                          for (final language in Language.values)
-                            DropdownMenuItem(
-                              value: language,
-                              child: Text(language.displayName),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _interfaceLanguage = value);
-                          }
-                        },
                       ),
                       const SizedBox(height: 12),
                     ],
                     TextField(
                       controller: _email,
                       keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
+                      decoration: InputDecoration(
+                        labelText: _strings.text('email'),
                         prefixIcon: Icon(Icons.email_outlined),
                       ),
                     ),
@@ -253,8 +368,8 @@ class _SignInPageState extends State<_SignInPage> {
                     TextField(
                       controller: _password,
                       obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Password',
+                      decoration: InputDecoration(
+                        labelText: _strings.text('password'),
                         prefixIcon: Icon(Icons.lock_outline),
                       ),
                     ),
@@ -273,10 +388,10 @@ class _SignInPageState extends State<_SignInPage> {
                       onPressed: _busy ? null : _submit,
                       child: Text(
                         _busy
-                            ? 'Please wait…'
+                            ? _strings.text('wait')
                             : _register
-                            ? 'Create account'
-                            : 'Sign in',
+                            ? _strings.text('create')
+                            : _strings.text('signIn'),
                       ),
                     ),
                     TextButton(
@@ -288,8 +403,8 @@ class _SignInPageState extends State<_SignInPage> {
                             }),
                       child: Text(
                         _register
-                            ? 'Already have an account? Sign in'
-                            : 'Have an invitation code? Create account',
+                            ? _strings.text('switchToSignIn')
+                            : _strings.text('switchToCreate'),
                       ),
                     ),
                   ],
@@ -304,48 +419,29 @@ class _SignInPageState extends State<_SignInPage> {
 }
 
 class _RoleWorkspace extends StatelessWidget {
-  const _RoleWorkspace({required this.userId});
-  final String userId;
+  const _RoleWorkspace({
+    super.key,
+    required this.profile,
+    required this.onLocaleChanged,
+  });
+  final Map<String, dynamic> profile;
+  final ValueChanged<Locale> onLocaleChanged;
 
   @override
-  Widget build(
-    BuildContext context,
-  ) => StreamBuilder<List<Map<String, dynamic>>>(
-    stream: Supabase.instance.client
-        .from('profiles')
-        .stream(primaryKey: ['id'])
-        .eq('id', userId),
-    builder: (context, snapshot) {
-      if (snapshot.hasError) {
-        return Scaffold(
-          body: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(
-                'We could not load your ORTA profile. Contact your Founder or try again.\n${snapshot.error}',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        );
-      }
-      if (!snapshot.hasData || snapshot.data!.isEmpty) {
-        return const Scaffold(body: Center(child: CircularProgressIndicator()));
-      }
-      final profile = snapshot.data!.first;
-      final role = profile['role'] as String;
-      final name = profile['full_name'] as String? ?? '';
-      final language = LanguageExtension.fromCode(
-        profile['interface_language'] as String? ?? 'en',
-      );
-      return _LiveRoleDashboard(
-        key: ValueKey(language.code),
-        role: role,
-        name: name,
-        interfaceLanguage: language,
-      );
-    },
-  );
+  Widget build(BuildContext context) {
+    final role = profile['role'] as String;
+    final name = profile['full_name'] as String? ?? '';
+    final language = LanguageExtension.fromCode(
+      profile['interface_language'] as String? ?? 'en',
+    );
+    return _LiveRoleDashboard(
+      key: ValueKey(language.code),
+      role: role,
+      name: name,
+      interfaceLanguage: language,
+      onLocaleChanged: onLocaleChanged,
+    );
+  }
 }
 
 class _LiveRoleDashboard extends StatefulWidget {
@@ -354,10 +450,12 @@ class _LiveRoleDashboard extends StatefulWidget {
     required this.role,
     required this.name,
     required this.interfaceLanguage,
+    required this.onLocaleChanged,
   });
   final String role;
   final String name;
   final Language interfaceLanguage;
+  final ValueChanged<Locale> onLocaleChanged;
 
   @override
   State<_LiveRoleDashboard> createState() => _LiveRoleDashboardState();
@@ -366,6 +464,10 @@ class _LiveRoleDashboard extends StatefulWidget {
 class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
   String? _section;
   bool _busy = false;
+  late Language _interfaceLanguage = widget.interfaceLanguage;
+  AdmissionsStrings get _strings =>
+      AdmissionsStrings(AppLocaleExtension.fromLanguage(_interfaceLanguage));
+  String _label(String value) => _strings.text(value);
 
   List<String> get _sections => switch (widget.role) {
     'founder' => [
@@ -508,19 +610,27 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          title: const Text('Invite to ORTA'),
+          title: Text(_strings.text('inviteTitle')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
                 initialValue: inviteRole,
-                decoration: const InputDecoration(labelText: 'Workspace role'),
-                items: const [
-                  DropdownMenuItem(value: 'student', child: Text('Student')),
-                  DropdownMenuItem(value: 'mentor', child: Text('Mentor')),
+                decoration: InputDecoration(
+                  labelText: _strings.text('workspaceRole'),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'student',
+                    child: Text(_strings.text('studentRole')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'mentor',
+                    child: Text(_strings.text('mentorRole')),
+                  ),
                   DropdownMenuItem(
                     value: 'parent',
-                    child: Text('Parent / guardian'),
+                    child: Text(_strings.text('parentRole')),
                   ),
                 ],
                 onChanged: (value) =>
@@ -530,8 +640,8 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
               TextField(
                 controller: emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email (optional)',
+                decoration: InputDecoration(
+                  labelText: _strings.text('emailOptional'),
                 ),
               ),
             ],
@@ -539,14 +649,14 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
+              child: Text(_strings.text('cancel')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, {
                 'role': inviteRole,
                 'email': emailController.text.trim(),
               }),
-              child: const Text('Create invite'),
+              child: Text(_strings.text('createInvite')),
             ),
           ],
         ),
@@ -565,12 +675,12 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Invitation created'),
+          title: Text(_strings.text('inviteCreated')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Share this one-time code with the invited person:'),
+              Text(_strings.text('shareCode')),
               const SizedBox(height: 12),
               SelectableText(
                 row['code'].toString(),
@@ -580,13 +690,17 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
                 ),
               ),
               const SizedBox(height: 8),
-              Text('Expires ${row['expires_at']}'),
+              Text(
+                _strings.text('expires', {
+                  'date': row['expires_at'].toString(),
+                }),
+              ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Done'),
+              child: Text(_strings.text('done')),
             ),
           ],
         ),
@@ -595,7 +709,11 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invite could not be created: $error')),
+          SnackBar(
+            content: Text(
+              _strings.text('inviteFailed', {'error': error.toString()}),
+            ),
+          ),
         );
       }
     } finally {
@@ -617,9 +735,13 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Lesson update failed: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _strings.text('lessonFailed', {'error': error.toString()}),
+            ),
+          ),
+        );
       }
     }
   }
@@ -633,23 +755,23 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
       final reason = await showDialog<String>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Dispute consultation'),
+          title: Text(_strings.text('disputeTitle')),
           content: TextField(
             controller: reasonController,
             maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'What should the Founder review?',
+            decoration: InputDecoration(
+              labelText: _strings.text('reviewPrompt'),
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(_strings.text('cancel')),
             ),
             FilledButton(
               onPressed: () =>
                   Navigator.pop(context, reasonController.text.trim()),
-              child: const Text('Send for review'),
+              child: Text(_strings.text('sendReview')),
             ),
           ],
         ),
@@ -666,7 +788,11 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
       } catch (error) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not submit dispute: $error')),
+            SnackBar(
+              content: Text(
+                _strings.text('disputeFailed', {'error': error.toString()}),
+              ),
+            ),
           );
         }
       }
@@ -680,7 +806,11 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
       } catch (error) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not confirm consultation: $error')),
+            SnackBar(
+              content: Text(
+                _strings.text('confirmFailed', {'error': error.toString()}),
+              ),
+            ),
           );
         }
       }
@@ -728,6 +858,7 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
         role: widget.role,
         studentId: studentId,
         studentName: widget.name,
+        locale: AppLocaleExtension.fromLanguage(_interfaceLanguage),
         store: LanguageOrtaAccess.canOpenRole(widget.role)
             ? SupabaseLanguageOrtaStore(
                 client: client,
@@ -754,23 +885,23 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
           onSelected: (value) => setState(() => _section = value),
           itemBuilder: (_) => [
             for (final section in _sections)
-              PopupMenuItem(value: section, child: Text(section)),
+              PopupMenuItem(value: section, child: Text(_label(section))),
           ],
           child: Row(
             mainAxisSize: MainAxisSize.min,
-            children: [Text(title), const Icon(Icons.arrow_drop_down)],
+            children: [Text(_label(title)), const Icon(Icons.arrow_drop_down)],
           ),
         ),
         actions: [
           if (widget.role == 'founder')
             IconButton(
-              tooltip: 'Invite user',
+              tooltip: _strings.text('inviteUser'),
               onPressed: _busy ? null : _createInvite,
               icon: const Icon(Icons.person_add_alt_1),
             ),
           PopupMenuButton<Language>(
-            tooltip: 'Interface language',
-            initialValue: widget.interfaceLanguage,
+            tooltip: _strings.text('language'),
+            initialValue: _interfaceLanguage,
             onSelected: _saveInterfaceLanguage,
             itemBuilder: (_) => [
               for (final language in Language.values)
@@ -782,7 +913,7 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
             icon: const Icon(Icons.translate),
           ),
           IconButton(
-            tooltip: 'Sign out',
+            tooltip: _strings.text('signOut'),
             onPressed: () => client.auth.signOut(),
             icon: const Icon(Icons.logout),
           ),
@@ -794,7 +925,11 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
               future: _query(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
-                  return Center(child: Text('Could not load $title.'));
+                  return Center(
+                    child: Text(
+                      _strings.text('couldNotLoad', {'section': _label(title)}),
+                    ),
+                  );
                 }
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
@@ -805,23 +940,21 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
                   children: [
                     Text(
                       widget.name.isEmpty
-                          ? 'Welcome to ORTA'
-                          : 'Welcome, ${widget.name}',
+                          ? _strings.text('welcomeNoName')
+                          : _strings.text('welcomeName', {'name': widget.name}),
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      '$title · ${rows.length}',
+                      '${_label(title)} · ${rows.length}',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 16),
                     if (rows.isEmpty)
-                      const Card(
+                      Card(
                         child: Padding(
-                          padding: EdgeInsets.all(18),
-                          child: Text(
-                            'Your ORTA workspace is ready. Records will appear here when they are added.',
-                          ),
+                          padding: const EdgeInsets.all(18),
+                          child: Text(_strings.text('workspaceReady')),
                         ),
                       ),
                     if (_busy) const LinearProgressIndicator(),
@@ -850,7 +983,7 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
                               ? TextButton(
                                   onPressed: () =>
                                       _completeLesson(row['id'] as String),
-                                  child: const Text('Mark conducted'),
+                                  child: Text(_strings.text('markConducted')),
                                 )
                               : widget.role == 'student' &&
                                     title == 'Consultations' &&
@@ -862,14 +995,14 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
                                         row['id'] as String,
                                         confirmed: true,
                                       ),
-                                      child: const Text('Confirm'),
+                                      child: Text(_strings.text('confirm')),
                                     ),
                                     TextButton(
                                       onPressed: () => _confirmLesson(
                                         row['id'] as String,
                                         confirmed: false,
                                       ),
-                                      child: const Text('Dispute'),
+                                      child: Text(_strings.text('dispute')),
                                     ),
                                   ],
                                 )
@@ -885,7 +1018,7 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
                                     );
                                     if (mounted) setState(() {});
                                   },
-                                  child: const Text('Verify offer'),
+                                  child: Text(_strings.text('verifyOffer')),
                                 )
                               : null,
                         ),
@@ -900,20 +1033,33 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
 
   Future<void> _saveInterfaceLanguage(Language language) async {
     try {
-      await Supabase.instance.client
-          .from('profiles')
-          .update({'interface_language': language.code})
-          .eq('id', Supabase.instance.client.auth.currentUser!.id);
+      final locale = await persistInterfaceLanguage(
+        language,
+        persist: (code) async {
+          await Supabase.instance.client
+              .from('profiles')
+              .update({'interface_language': code})
+              .eq('id', Supabase.instance.client.auth.currentUser!.id)
+              .select('id')
+              .single();
+        },
+      );
       if (mounted) {
+        setState(() => _interfaceLanguage = language);
+        widget.onLocaleChanged(locale);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Interface language saved.')),
+          SnackBar(
+            content: Text(
+              AdmissionsStrings(AppLocaleExtension.fromLanguage(language))
+                  .text('languageSaved'),
+            ),
+          ),
         );
-        setState(() {});
       }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save interface language.')),
+          SnackBar(content: Text(_strings.text('languageFailed'))),
         );
       }
     }
