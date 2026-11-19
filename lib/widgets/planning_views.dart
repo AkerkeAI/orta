@@ -22,24 +22,108 @@ class DailyOverview extends StatelessWidget {
         recommendations = engine.recommendations();
     return SafeArea(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 112),
         children: [
-          Text(
-            '${planningText(language, 'greeting')}, ${data.life.name}',
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+          Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF087F73), Color(0xFF10B9A2)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(26),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF087F73).withValues(alpha: 0.18),
+                  blurRadius: 22,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.wb_sunny_outlined,
+                      color: Colors.white70,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        planningDate(language, engine.today),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${commitments.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 17),
+                Text(
+                  '${planningText(language, 'greeting')}, ${data.life.name}',
+                  style: const TextStyle(
+                    fontSize: 27,
+                    height: 1.15,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  engine.zone,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ],
+            ),
           ),
-          Text('${planningDate(language, engine.today)} · ${engine.zone}'),
-          const SizedBox(height: 16),
+          const SizedBox(height: 22),
           _PlanningCard(
             title: planningText(language, 'commitments'),
             children: commitments.isEmpty
-                ? [Text(planningText(language, 'empty'))]
+                ? [_EmptyAgenda(text: planningText(language, 'empty'))]
                 : commitments
                       .take(5)
                       .map(
                         (o) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8F7F4),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Icon(
+                              Icons.event_available_rounded,
+                              color: Color(0xFF078F7D),
+                            ),
+                          ),
                           title: Text(o.event.title),
                           subtitle: Text(occurrenceTime(language, o)),
+                          trailing: const Icon(Icons.chevron_right_rounded),
                           onTap: () =>
                               onSelect?.call('calendar_event', o.event.id),
                         ),
@@ -53,10 +137,14 @@ class DailyOverview extends StatelessWidget {
                   .take(3)
                   .map(
                     (r) => ListTile(
+                      contentPadding: EdgeInsets.zero,
                       leading: Icon(
                         r.code == 'conflict' || r.code == 'overload'
-                            ? Icons.warning_amber
-                            : Icons.auto_awesome,
+                            ? Icons.warning_amber_rounded
+                            : Icons.auto_awesome_rounded,
+                        color: r.code == 'conflict' || r.code == 'overload'
+                            ? const Color(0xFFD78A25)
+                            : const Color(0xFF078F7D),
                       ),
                       title: Text(
                         recommendationText(
@@ -71,6 +159,7 @@ class DailyOverview extends StatelessWidget {
                         ),
                       ),
                       onTap: () => onSelect?.call(r.kind, r.id),
+                      trailing: const Icon(Icons.arrow_forward_rounded),
                     ),
                   )
                   .toList(),
@@ -407,17 +496,47 @@ class _PlanningCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
     color: color,
-    margin: const EdgeInsets.only(bottom: 12),
+    margin: const EdgeInsets.only(bottom: 14),
     child: Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(18, 17, 18, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.2,
+            ),
+          ),
           const SizedBox(height: 8),
           ...children,
         ],
       ),
+    ),
+  );
+}
+
+class _EmptyAgenda extends StatelessWidget {
+  final String text;
+  const _EmptyAgenda({required this.text});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    margin: const EdgeInsets.only(top: 8, bottom: 5),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF2F8F7),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.event_note_rounded, color: Color(0xFF078F7D)),
+        const SizedBox(width: 12),
+        Expanded(child: Text(text)),
+      ],
     ),
   );
 }
