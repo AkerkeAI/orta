@@ -105,10 +105,11 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
       builder: (context, snapshot) {
         final userId = Supabase.instance.client.auth.currentUser?.id;
         if (userId == null) {
+          final signedOut = snapshot.data?.event == AuthChangeEvent.signedOut;
           _loadedUserId = null;
           _loadedProfile = null;
           _activeAppLocale = null;
-          _selectedProduct = null;
+          if (signedOut) _selectedProduct = null;
           return _selectedProduct == null
               ? _ProductChooser(onSelected: (value) => setState(() => _selectedProduct = value))
               : _SignInPage(
