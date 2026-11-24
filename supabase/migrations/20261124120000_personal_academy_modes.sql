@@ -2,7 +2,6 @@
 alter table public.profiles
   add column if not exists app_mode text
   check (app_mode is null or app_mode in ('personal', 'academy'));
-grant update (app_mode) on public.profiles to authenticated;
 
 create table if not exists public.academy_activation_codes (
   id uuid primary key default gen_random_uuid(),

@@ -124,7 +124,7 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
           key: ValueKey('profile-$userId-$_profileLoadAttempt'),
           future: Supabase.instance.client
               .from('profiles')
-              .select('role, full_name, interface_language')
+              .select('role, full_name, interface_language, app_mode')
               .eq('id', userId)
               .single(),
           builder: (context, profileSnapshot) {
@@ -172,7 +172,11 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
               return _ModeChooser(
                 onChoose: (mode) async {
                   await Supabase.instance.client.rpc('select_orta_mode', params: {'p_mode': mode});
-                  if (mounted) setState(() { _loadedUserId = null; _loadedProfile = null; _profileLoadAttempt++; });
+                  final updated = await Supabase.instance.client.from('profiles')
+                      .select('role, full_name, interface_language, app_mode')
+                      .eq('id', userId).single();
+                  if (updated['app_mode'] != mode) throw StateError('ORTA did not confirm the selected mode.');
+                  if (mounted) setState(() { _loadedUserId = userId; _loadedProfile = updated; _activeAppLocale = interfaceLocaleFromProfile(updated); });
                 },
               );
             }
@@ -465,10 +469,7 @@ class _ModeChooser extends StatelessWidget {
       ],
     )),
   )));
-  Future<void> _choose(BuildContext context, String mode) async {
-    try { await onChoose(mode); }
-    catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save your choice: $error'))); }
-  }
+  Future<void> _choose(BuildContext context, String mode) async { try { await onChoose(mode); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save your choice: $error'))); } }
 }
 
 class _PersonalEntry extends StatefulWidget {
