@@ -304,10 +304,16 @@ class _SignInPageState extends State<_SignInPage> {
   final _password = TextEditingController();
   final _name = TextEditingController();
   final _invite = TextEditingController();
-  bool _register = false;
+  late bool _register;
   Language _interfaceLanguage = Language.english;
   bool _busy = false;
   String? _message;
+
+  @override
+  void initState() {
+    super.initState();
+    _register = widget.product == 'academy';
+  }
 
   AdmissionsStrings get _strings =>
       AdmissionsStrings(AppLocaleExtension.fromLanguage(_interfaceLanguage));
@@ -501,7 +507,9 @@ class _SignInPageState extends State<_SignInPage> {
                       child: Text(
                         _register
                             ? _strings.text('switchToSignIn')
-                            : _strings.text('switchToCreate'),
+                            : widget.product == 'academy'
+                                ? 'New Academy student? Register with invitation code'
+                                : _strings.text('switchToCreate'),
                       ),
                     ),
                     if (!_register) TextButton(onPressed: _busy ? null : _resetPassword, child: const Text('Forgot password?')),
