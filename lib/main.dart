@@ -452,7 +452,7 @@ class _RoleWorkspace extends StatelessWidget {
 
 class _ModeChooser extends StatelessWidget {
   const _ModeChooser({required this.onChoose});
-  final ValueChanged<String> onChoose;
+  final Future<void> Function(String mode) onChoose;
   @override
   Widget build(BuildContext context) => Scaffold(body: Center(child: ConstrainedBox(
     constraints: const BoxConstraints(maxWidth: 520), child: Padding(padding: const EdgeInsets.all(28), child: Column(
