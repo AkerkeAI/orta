@@ -9,6 +9,7 @@ import '../../services/action_agent.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/product_strings.dart';
 
@@ -146,6 +147,11 @@ class _OrtaShellState extends State<OrtaShell> {
     );
   }
 
+  void _openLanguageHome() {
+    if (_context.languages.isEmpty) { _addLanguage(); return; }
+    setState(() { _selectedLanguageCode = _context.languages.first.languageCode; _languageMode = true; });
+  }
+
   void _addLifeArea() {
     showModalBottomSheet<void>(
       context: context,
@@ -216,7 +222,7 @@ class _OrtaShellState extends State<OrtaShell> {
           _selectedLanguageCode ?? _context.languages.first.languageCode,
           phrase,
         ),
-        onBack: () => setState(() => _languageMode = false),
+        onBack: () => setState(() { _languageMode = false; _index = 0; }),
         currentLocale: widget.currentLocale,
       );
     }
@@ -227,6 +233,16 @@ class _OrtaShellState extends State<OrtaShell> {
         data: widget.repository.data,
         onSelectEntity: (type, id) => _openAgent(type: type, id: id),
       ),
+      AgentSheet(
+        embedded: true,
+        onClose: () => setState(() => _index = 0),
+        repository: widget.repository,
+        contextBuilder: () => _agentContext(),
+        agentService: useRemoteOrtaAgent ? RemoteOrtaAgentService() : MockOrtaAgentService(),
+      ),
+      const SizedBox.shrink(),
+      ProgressView(items: _progress, language: _context.interfaceLanguage),
+      /* Plan and Life stay accessible through the Home dashboard and AI tools. */
       PlanView(
         data: widget.repository.data,
         onPreferences: () => showDialog<void>(
@@ -262,7 +278,6 @@ class _OrtaShellState extends State<OrtaShell> {
         }),
         onReset: widget.onResetOnboarding,
       ),
-      ProgressView(items: _progress, language: _context.interfaceLanguage),
     ];
     return Scaffold(
       appBar: AppBar(
@@ -279,7 +294,7 @@ class _OrtaShellState extends State<OrtaShell> {
       body: Stack(
         children: [
           screens[_index],
-          Positioned(
+          if (_index != 1) Positioned(
             right: 18,
             bottom: 18,
             child: AgentButton(onPressed: _openAgent),
@@ -288,23 +303,18 @@ class _OrtaShellState extends State<OrtaShell> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
+        onDestinationSelected: (value) {
+          if (value == 2) { _openLanguageHome(); return; }
+          setState(() => _index = value);
+        },
         destinations: [
           NavigationDestination(
             icon: const Icon(Icons.home_outlined),
             selectedIcon: const Icon(Icons.home),
             label: _label('home'),
           ),
-          NavigationDestination(
-            icon: const Icon(Icons.calendar_month_outlined),
-            selectedIcon: const Icon(Icons.calendar_month),
-            label: _label('plan'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.account_tree_outlined),
-            selectedIcon: const Icon(Icons.account_tree),
-            label: _label('life'),
-          ),
+          const NavigationDestination(icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome), label: 'ORTA AI'),
+          NavigationDestination(icon: const Icon(Icons.translate_outlined), selectedIcon: const Icon(Icons.translate), label: 'Language ORTA',),
           NavigationDestination(
             icon: const Icon(Icons.insights_outlined),
             selectedIcon: const Icon(Icons.insights),
@@ -343,6 +353,25 @@ class _OrtaShellState extends State<OrtaShell> {
                   },
                 ),
               Text(productText(language, 'privacy')),
+              const Divider(height: 24),
+              ListTile(leading: const Icon(Icons.logout), title: const Text('Sign out'), onTap: () async {
+                Navigator.pop(dialogContext);
+                await Supabase.instance.client.auth.signOut();
+              }),
+              ListTile(leading: const Icon(Icons.delete_forever_outlined, color: Colors.red), title: const Text('Delete account', style: TextStyle(color: Colors.red)), onTap: () async {
+                final confirm = await showDialog<bool>(context: dialogContext, builder: (confirmContext) => AlertDialog(
+                  title: const Text('Delete your account?'),
+                  content: const Text('This permanently deletes your account and its associated data.'),
+                  actions: [TextButton(onPressed: () => Navigator.pop(confirmContext, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(confirmContext, true), child: const Text('Delete account'))],
+                ));
+                if (confirm != true || !dialogContext.mounted) return;
+                try {
+                  await Supabase.instance.client.functions.invoke('delete-account');
+                  await Supabase.instance.client.auth.signOut();
+                } catch (_) {
+                  if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Account deletion is not configured. Contact ORTA support.')));
+                }
+              }),
             ],
           ),
         ),
@@ -859,11 +888,15 @@ class AgentSheet extends StatefulWidget {
   final AgentContext Function() contextBuilder;
   final LifeRepository repository;
   final OrtaAgentService agentService;
+  final bool embedded;
+  final VoidCallback? onClose;
   const AgentSheet({
     super.key,
     required this.contextBuilder,
     required this.repository,
     required this.agentService,
+    this.embedded = false,
+    this.onClose,
   });
   @override
   State<AgentSheet> createState() => _AgentSheetState();
@@ -1310,9 +1343,8 @@ class _AgentSheetState extends State<AgentSheet> {
           color: Theme.of(context).scaffoldBackgroundColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           child: SizedBox(
-            height:
-                MediaQuery.sizeOf(context).height *
-                (_expanded || keyboard ? .94 : .52),
+            height: MediaQuery.sizeOf(context).height *
+                (widget.embedded ? 1 : (_expanded || keyboard ? .94 : .52)),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -1350,7 +1382,7 @@ class _AgentSheetState extends State<AgentSheet> {
                       ),
                       IconButton(
                         tooltip: productText(_language, 'close'),
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: widget.onClose ?? () => Navigator.pop(context),
                         icon: const Icon(Icons.close),
                       ),
                     ],

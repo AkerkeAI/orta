@@ -83,6 +83,7 @@ class _AdmissionsEntry extends StatefulWidget {
 }
 
 class _AdmissionsEntryState extends State<_AdmissionsEntry> {
+  String? _selectedProduct;
   String? _loadedUserId;
   Map<String, dynamic>? _loadedProfile;
   int _profileLoadAttempt = 0;
@@ -107,7 +108,13 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
           _loadedUserId = null;
           _loadedProfile = null;
           _activeAppLocale = null;
-          return _SignInPage(onLocaleChanged: widget.onLocaleChanged);
+          return _selectedProduct == null
+              ? _ProductChooser(onSelected: (value) => setState(() => _selectedProduct = value))
+              : _SignInPage(
+                  onLocaleChanged: widget.onLocaleChanged,
+                  product: _selectedProduct!,
+                  onBack: () => setState(() => _selectedProduct = null),
+                );
         }
         if (_loadedUserId == userId &&
             _loadedProfile != null &&
@@ -226,9 +233,28 @@ class _ConfigurationRequired extends StatelessWidget {
   }
 }
 
+class _ProductChooser extends StatelessWidget {
+  const _ProductChooser({required this.onSelected});
+  final ValueChanged<String> onSelected;
+  @override
+  Widget build(BuildContext context) => Scaffold(body: Center(child: ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 420), child: Padding(padding: const EdgeInsets.all(28), child: Column(
+      mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('Choose your ORTA', textAlign: TextAlign.center, style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 24),
+        FilledButton(onPressed: () => onSelected('personal'), child: const Text('Personal ORTA')),
+        const SizedBox(height: 12),
+        OutlinedButton(onPressed: () => onSelected('academy'), child: const Text('ORTA Academy')),
+      ],
+    )),
+  )));
+}
+
 class _SignInPage extends StatefulWidget {
-  const _SignInPage({required this.onLocaleChanged});
+  const _SignInPage({required this.onLocaleChanged, required this.product, required this.onBack});
   final ValueChanged<Locale?> onLocaleChanged;
+  final String product;
+  final VoidCallback onBack;
 
   @override
   State<_SignInPage> createState() => _SignInPageState();
@@ -255,6 +281,13 @@ class _SignInPageState extends State<_SignInPage> {
     try {
       final auth = Supabase.instance.client.auth;
       if (_register) {
+        if (widget.product == 'personal') {
+          await auth.signUp(email: _email.text.trim(), password: _password.text,
+            emailRedirectTo: Uri.base.scheme.startsWith('http') ? Uri.base.origin : null,
+            data: {'full_name': _name.text.trim(), 'app_mode': 'personal', 'interface_language': _interfaceLanguage.code});
+          if (mounted) setState(() => _message = _strings.text('checkEmail'));
+          return;
+        }
         await auth.signUp(
           email: _email.text.trim(),
           password: _password.text,
@@ -286,6 +319,17 @@ class _SignInPageState extends State<_SignInPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _resetPassword() async {
+    final email = _email.text.trim();
+    if (email.isEmpty) { setState(() => _message = 'Enter your email first to receive a reset link.'); return; }
+    setState(() { _busy = true; _message = null; });
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      if (mounted) setState(() => _message = 'If an account exists for this email, a reset link has been sent.');
+    } catch (_) { if (mounted) setState(() => _message = _strings.text('connectionError')); }
+    finally { if (mounted) setState(() => _busy = false); }
   }
 
   @override
@@ -363,7 +407,7 @@ class _SignInPageState extends State<_SignInPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      TextField(
+                      if (widget.product == 'academy') TextField(
                         controller: _invite,
                         decoration: InputDecoration(
                           labelText: _strings.text('invite'),
@@ -421,6 +465,8 @@ class _SignInPageState extends State<_SignInPage> {
                             : _strings.text('switchToCreate'),
                       ),
                     ),
+                    if (!_register) TextButton(onPressed: _busy ? null : _resetPassword, child: const Text('Forgot password?')),
+                    TextButton(onPressed: _busy ? null : widget.onBack, child: const Text('Back to ORTA choice')),
                   ],
                 ),
               ),

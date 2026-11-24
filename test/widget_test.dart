@@ -192,7 +192,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('HOME'), findsOneWidget);
-    expect(find.text('LIFE'), findsOneWidget);
+    expect(find.text('ORTA AI'), findsOneWidget);
+    expect(find.text('Language ORTA'), findsOneWidget);
     expect(find.text('Projects'), findsNothing);
   });
 }
