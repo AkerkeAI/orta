@@ -170,8 +170,15 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
             final profile = profileSnapshot.data!;
             if (profile['app_mode'] == null && profile['role'] == 'student') {
               return _ModeChooser(
-                onChoose: (mode) async {
-                  await Supabase.instance.client.rpc('select_orta_mode', params: {'p_mode': mode});
+                onChoose: (mode, code) async {
+                  if (mode == 'academy') {
+                    final activated = await Supabase.instance.client.rpc(
+                      'activate_orta_academy', params: {'p_code': code},
+                    );
+                    if (activated != true) throw StateError('The Founder code is invalid, expired, or already used.');
+                  } else {
+                    await Supabase.instance.client.rpc('select_orta_mode', params: {'p_mode': mode});
+                  }
                   final updated = await Supabase.instance.client.from('profiles')
                       .select('role, full_name, interface_language, app_mode')
                       .eq('id', userId).single();
@@ -456,7 +463,7 @@ class _RoleWorkspace extends StatelessWidget {
 
 class _ModeChooser extends StatelessWidget {
   const _ModeChooser({required this.onChoose});
-  final Future<void> Function(String mode) onChoose;
+  final Future<void> Function(String mode, String? code) onChoose;
   @override
   Widget build(BuildContext context) => Scaffold(body: Center(child: ConstrainedBox(
     constraints: const BoxConstraints(maxWidth: 520), child: Padding(padding: const EdgeInsets.all(28), child: Column(
@@ -465,11 +472,22 @@ class _ModeChooser extends StatelessWidget {
         const SizedBox(height: 20),
         FilledButton.icon(onPressed: () => _choose(context, 'personal'), icon: const Icon(Icons.person_outline), label: const Text('Personal ORTA')),
         const SizedBox(height: 12),
-        OutlinedButton.icon(onPressed: () => _choose(context, 'academy'), icon: const Icon(Icons.school_outlined), label: const Text('ORTA Academy')),
+        OutlinedButton.icon(onPressed: () => _chooseAcademy(context), icon: const Icon(Icons.school_outlined), label: const Text('ORTA Academy')),
       ],
     )),
   )));
-  Future<void> _choose(BuildContext context, String mode) async { try { await onChoose(mode); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save your choice: $error'))); } }
+  Future<void> _choose(BuildContext context, String mode) async { try { await onChoose(mode, null); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save your choice: $error'))); } }
+  Future<void> _chooseAcademy(BuildContext context) async {
+    final controller = TextEditingController();
+    final code = await showDialog<String>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Founder code required'),
+      content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'Academy activation code')),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Continue'))],
+    ));
+    controller.dispose();
+    if (code == null || code.isEmpty || !context.mounted) return;
+    try { await onChoose('academy', code); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not activate Academy: $error'))); }
+  }
 }
 
 class _PersonalEntry extends StatefulWidget {
