@@ -108,6 +108,7 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
           _loadedUserId = null;
           _loadedProfile = null;
           _activeAppLocale = null;
+          _selectedProduct = null;
           return _selectedProduct == null
               ? _ProductChooser(onSelected: (value) => setState(() => _selectedProduct = value))
               : _SignInPage(
