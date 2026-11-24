@@ -84,6 +84,7 @@ class _AdmissionsEntry extends StatefulWidget {
 
 class _AdmissionsEntryState extends State<_AdmissionsEntry> {
   String? _selectedProduct;
+  bool _resetForCurrentSignOut = false;
   String? _loadedUserId;
   Map<String, dynamic>? _loadedProfile;
   int _profileLoadAttempt = 0;
@@ -109,7 +110,10 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
           _loadedUserId = null;
           _loadedProfile = null;
           _activeAppLocale = null;
-          if (signedOut) _selectedProduct = null;
+          if (signedOut && !_resetForCurrentSignOut) {
+            _selectedProduct = null;
+            _resetForCurrentSignOut = true;
+          }
           return _selectedProduct == null
               ? _ProductChooser(onSelected: (value) => setState(() => _selectedProduct = value))
               : _SignInPage(
@@ -118,6 +122,7 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
                   onBack: () => setState(() => _selectedProduct = null),
                 );
         }
+        _resetForCurrentSignOut = false;
         if (_loadedUserId == userId &&
             _loadedProfile != null &&
             _activeAppLocale != null) {
@@ -177,6 +182,17 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
               );
             }
             final profile = profileSnapshot.data!;
+            final role = profile['role'] as String? ?? '';
+            final mode = profile['app_mode'] as String?;
+            if ((_selectedProduct == 'personal' && role != 'student') ||
+                (_selectedProduct == 'academy' && mode == 'personal')) {
+              return _ProductAccountMismatch(
+                product: _selectedProduct!,
+                role: role,
+                onSignOut: () => Supabase.instance.client.auth.signOut(),
+                onBack: () => setState(() => _selectedProduct = null),
+              );
+            }
             if (profile['app_mode'] == null && profile['role'] == 'student') {
               return _ModeChooser(
                 onChoose: (mode, code) async {
@@ -247,6 +263,27 @@ class _ProductChooser extends StatelessWidget {
         FilledButton(onPressed: () => onSelected('personal'), child: const Text('Personal ORTA')),
         const SizedBox(height: 12),
         OutlinedButton(onPressed: () => onSelected('academy'), child: const Text('ORTA Academy')),
+      ],
+    )),
+  )));
+}
+
+class _ProductAccountMismatch extends StatelessWidget {
+  const _ProductAccountMismatch({required this.product, required this.role, required this.onSignOut, required this.onBack});
+  final String product, role;
+  final VoidCallback onSignOut, onBack;
+  @override
+  Widget build(BuildContext context) => Scaffold(body: Center(child: Padding(
+    padding: const EdgeInsets.all(28), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 440), child: Column(
+      mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Icon(Icons.account_circle_outlined, size: 48),
+        const SizedBox(height: 16),
+        Text('This account belongs to ORTA ${role == 'founder' || role == 'mentor' ? 'Academy' : 'Personal'}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        Text('You chose ${product == 'personal' ? 'Personal ORTA' : 'ORTA Academy'}, but this signed-in account is registered for a different area. Sign out and use the matching account, or return to the mode chooser.', textAlign: TextAlign.center),
+        const SizedBox(height: 20),
+        FilledButton(onPressed: onSignOut, child: const Text('Sign out')),
+        TextButton(onPressed: onBack, child: const Text('Back to ORTA choice')),
       ],
     )),
   )));
