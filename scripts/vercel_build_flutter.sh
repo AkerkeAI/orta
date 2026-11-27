@@ -26,6 +26,8 @@ if [[ ! -x "${SDK_DIR}/bin/flutter" ]]; then
 fi
 
 export PATH="${SDK_DIR}/bin:${PATH}"
+# Vercel may extract the SDK as root while Flutter runs as a different build user.
+git config --global --add safe.directory "${SDK_DIR}"
 : "${SUPABASE_URL:?Set SUPABASE_URL in Vercel Environment Variables}"
 : "${SUPABASE_PUBLISHABLE_KEY:?Set SUPABASE_PUBLISHABLE_KEY in Vercel Environment Variables}"
 : "${ORTA_BACKEND_URL:?Set ORTA_BACKEND_URL to the public Render service URL}"
