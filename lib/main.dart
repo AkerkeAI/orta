@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -6,6 +9,7 @@ import 'app/orta_app.dart';
 import 'app/theme/app_theme.dart';
 import 'models/language.dart';
 import 'models/language_orta_models.dart';
+import 'screens/auth/password_recovery_page.dart';
 import 'screens/language_orta/language_orta_workspace.dart';
 import 'services/language_orta_access.dart';
 import 'services/language_orta_store.dart';
@@ -16,10 +20,22 @@ import 'services/interface_language.dart';
 import 'services/storage_service.dart';
 
 bool _supabaseConfigured = false;
+const _ortaViolet = Color(0xFF403B9D);
+const _ortaVioletDeep = Color(0xFF292660);
+const _ortaSandInk = Color(0xFF965C31);
+const _ortaInk = Color(0xFF24233A);
+const _ortaMuted = Color(0xFF77758D);
+const _ortaAuthRedirectUri = 'com.example.orta://login-callback';
+const _defaultSupabaseUrl = 'https://gjjayhhumqmkcauxbpmg.supabase.co';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  const configuredSupabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  final supabaseUrl = configuredSupabaseUrl.isEmpty ||
+          configuredSupabaseUrl.contains('ВАШ_SUPABASE_URL') ||
+          configuredSupabaseUrl.contains('<your_supabase_url>')
+      ? _defaultSupabaseUrl
+      : configuredSupabaseUrl;
   const supabaseKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
   if (supabaseUrl.isNotEmpty && supabaseKey.isNotEmpty) {
     await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseKey);
@@ -78,9 +94,37 @@ class _AdmissionsEntry extends StatefulWidget {
 }
 
 class _AdmissionsEntryState extends State<_AdmissionsEntry> {
+  String? _selectedProduct;
+  bool _resetForCurrentSignOut = false;
   String? _loadedUserId;
   Map<String, dynamic>? _loadedProfile;
   int _profileLoadAttempt = 0;
+  bool _showPasswordRecovery = false;
+  StreamSubscription<AuthState>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_supabaseConfigured) {
+      _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen(
+        (state) {
+          if (!mounted) return;
+          if (state.event == AuthChangeEvent.passwordRecovery) {
+            setState(() => _showPasswordRecovery = true);
+          } else if (state.event == AuthChangeEvent.signedOut) {
+            setState(() => _showPasswordRecovery = false);
+          }
+        },
+        onError: (Object _) {},
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
 
   void _syncLocale(Locale? locale) {
     if (locale == null) return;
@@ -94,16 +138,39 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
   @override
   Widget build(BuildContext context) {
     if (!_supabaseConfigured) return const _ConfigurationRequired();
+    if (_showPasswordRecovery) {
+      final auth = Supabase.instance.client.auth;
+      return PasswordRecoveryPage(
+        onPasswordUpdated: (password) async {
+          await auth.updateUser(UserAttributes(password: password));
+        },
+        onReturnToSignIn: () async {
+          await auth.signOut(scope: SignOutScope.global);
+        },
+      );
+    }
     return StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
         final userId = Supabase.instance.client.auth.currentUser?.id;
         if (userId == null) {
+          final signedOut = snapshot.data?.event == AuthChangeEvent.signedOut;
           _loadedUserId = null;
           _loadedProfile = null;
           _activeAppLocale = null;
-          return _SignInPage(onLocaleChanged: widget.onLocaleChanged);
+          if (signedOut && !_resetForCurrentSignOut) {
+            _selectedProduct = null;
+            _resetForCurrentSignOut = true;
+          }
+          return _selectedProduct == null
+              ? _ProductChooser(onSelected: (value) => setState(() => _selectedProduct = value))
+              : _SignInPage(
+                  onLocaleChanged: widget.onLocaleChanged,
+                  product: _selectedProduct!,
+                  onBack: () => setState(() => _selectedProduct = null),
+                );
         }
+        _resetForCurrentSignOut = false;
         if (_loadedUserId == userId &&
             _loadedProfile != null &&
             _activeAppLocale != null) {
@@ -119,7 +186,7 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
           key: ValueKey('profile-$userId-$_profileLoadAttempt'),
           future: Supabase.instance.client
               .from('profiles')
-              .select('role, full_name, interface_language')
+              .select('role, full_name, interface_language, app_mode')
               .eq('id', userId)
               .single(),
           builder: (context, profileSnapshot) {
@@ -163,6 +230,36 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
               );
             }
             final profile = profileSnapshot.data!;
+            final role = profile['role'] as String? ?? '';
+            final mode = profile['app_mode'] as String?;
+            if ((_selectedProduct == 'personal' && role != 'student') ||
+                (_selectedProduct == 'academy' && mode == 'personal')) {
+              return _ProductAccountMismatch(
+                product: _selectedProduct!,
+                role: role,
+                onSignOut: () => Supabase.instance.client.auth.signOut(),
+                onBack: () => setState(() => _selectedProduct = null),
+              );
+            }
+            if (profile['app_mode'] == null && profile['role'] == 'student') {
+              return _ModeChooser(
+                onChoose: (mode, code) async {
+                  if (mode == 'academy') {
+                    final activated = await Supabase.instance.client.rpc(
+                      'activate_orta_academy', params: {'p_code': code},
+                    );
+                    if (activated != true) throw StateError('The Founder code is invalid, expired, or already used.');
+                  } else {
+                    await Supabase.instance.client.rpc('select_orta_mode', params: {'p_mode': mode});
+                  }
+                  final updated = await Supabase.instance.client.from('profiles')
+                      .select('role, full_name, interface_language, app_mode')
+                      .eq('id', userId).single();
+                  if (updated['app_mode'] != mode) throw StateError('ORTA did not confirm the selected mode.');
+                  if (mounted) setState(() { _loadedUserId = userId; _loadedProfile = updated; _activeAppLocale = interfaceLocaleFromProfile(updated); });
+                },
+              );
+            }
             final locale = interfaceLocaleFromProfile(profile);
             final language = LanguageExtension.fromCode(locale.languageCode);
             _loadedUserId = userId;
@@ -202,9 +299,49 @@ class _ConfigurationRequired extends StatelessWidget {
   }
 }
 
+class _ProductChooser extends StatelessWidget {
+  const _ProductChooser({required this.onSelected});
+  final ValueChanged<String> onSelected;
+  @override
+  Widget build(BuildContext context) => Scaffold(body: Center(child: ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 420), child: Padding(padding: const EdgeInsets.all(28), child: Column(
+      mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('Choose your ORTA', textAlign: TextAlign.center, style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 24),
+        FilledButton(onPressed: () => onSelected('personal'), child: const Text('Personal ORTA')),
+        const SizedBox(height: 12),
+        OutlinedButton(onPressed: () => onSelected('academy'), child: const Text('ORTA Academy')),
+      ],
+    )),
+  )));
+}
+
+class _ProductAccountMismatch extends StatelessWidget {
+  const _ProductAccountMismatch({required this.product, required this.role, required this.onSignOut, required this.onBack});
+  final String product, role;
+  final VoidCallback onSignOut, onBack;
+  @override
+  Widget build(BuildContext context) => Scaffold(body: Center(child: Padding(
+    padding: const EdgeInsets.all(28), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 440), child: Column(
+      mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Icon(Icons.account_circle_outlined, size: 48),
+        const SizedBox(height: 16),
+        Text('This account belongs to ORTA ${role == 'founder' || role == 'mentor' ? 'Academy' : 'Personal'}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        Text('You chose ${product == 'personal' ? 'Personal ORTA' : 'ORTA Academy'}, but this signed-in account is registered for a different area. Sign out and use the matching account, or return to the mode chooser.', textAlign: TextAlign.center),
+        const SizedBox(height: 20),
+        FilledButton(onPressed: onSignOut, child: const Text('Sign out')),
+        TextButton(onPressed: onBack, child: const Text('Back to ORTA choice')),
+      ],
+    )),
+  )));
+}
+
 class _SignInPage extends StatefulWidget {
-  const _SignInPage({required this.onLocaleChanged});
+  const _SignInPage({required this.onLocaleChanged, required this.product, required this.onBack});
   final ValueChanged<Locale?> onLocaleChanged;
+  final String product;
+  final VoidCallback onBack;
 
   @override
   State<_SignInPage> createState() => _SignInPageState();
@@ -215,10 +352,16 @@ class _SignInPageState extends State<_SignInPage> {
   final _password = TextEditingController();
   final _name = TextEditingController();
   final _invite = TextEditingController();
-  bool _register = false;
+  late bool _register;
   Language _interfaceLanguage = Language.english;
   bool _busy = false;
   String? _message;
+
+  @override
+  void initState() {
+    super.initState();
+    _register = widget.product == 'academy';
+  }
 
   AdmissionsStrings get _strings =>
       AdmissionsStrings(AppLocaleExtension.fromLanguage(_interfaceLanguage));
@@ -231,13 +374,17 @@ class _SignInPageState extends State<_SignInPage> {
     try {
       final auth = Supabase.instance.client.auth;
       if (_register) {
+        if (widget.product == 'personal') {
+          await auth.signUp(email: _email.text.trim(), password: _password.text,
+            emailRedirectTo: kIsWeb ? Uri.base.origin : _ortaAuthRedirectUri,
+            data: {'full_name': _name.text.trim(), 'app_mode': 'personal', 'interface_language': _interfaceLanguage.code});
+          if (mounted) setState(() => _message = _strings.text('checkEmail'));
+          return;
+        }
         await auth.signUp(
           email: _email.text.trim(),
           password: _password.text,
-          emailRedirectTo:
-              Uri.base.scheme == 'http' || Uri.base.scheme == 'https'
-              ? Uri.base.origin
-              : null,
+          emailRedirectTo: kIsWeb ? Uri.base.origin : _ortaAuthRedirectUri,
           data: {
             'full_name': _name.text.trim(),
             'invite_code': _invite.text.trim(),
@@ -264,6 +411,22 @@ class _SignInPageState extends State<_SignInPage> {
     }
   }
 
+  Future<void> _resetPassword() async {
+    final email = _email.text.trim();
+    if (email.isEmpty) { setState(() => _message = 'Enter your email first to receive a reset link.'); return; }
+    setState(() { _busy = true; _message = null; });
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: kIsWeb ? Uri.base.origin : _ortaAuthRedirectUri,
+      );
+      if (mounted) setState(() => _message = 'If an account exists for this email, a reset link has been sent.');
+    } on AuthException catch (error) {
+      if (mounted) setState(() => _message = error.message);
+    } catch (_) { if (mounted) setState(() => _message = _strings.text('connectionError')); }
+    finally { if (mounted) setState(() => _busy = false); }
+  }
+
   @override
   void dispose() {
     _email.dispose();
@@ -275,7 +438,7 @@ class _SignInPageState extends State<_SignInPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: const Color(0xFFF5F7FB),
+    backgroundColor: const Color(0xFFF6F5FC),
     body: SafeArea(
       child: Center(
         child: SingleChildScrollView(
@@ -290,11 +453,7 @@ class _SignInPageState extends State<_SignInPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.hub_rounded,
-                      size: 42,
-                      color: Color(0xFF4568F5),
-                    ),
+                    const Icon(Icons.hub_rounded, size: 42, color: _ortaViolet),
                     const SizedBox(height: 10),
                     const Text(
                       'ORTA',
@@ -303,7 +462,7 @@ class _SignInPageState extends State<_SignInPage> {
                         fontSize: 25,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1,
-                        color: Color(0xFF172B4D),
+                        color: _ortaInk,
                       ),
                     ),
                     const SizedBox(height: 5),
@@ -312,10 +471,7 @@ class _SignInPageState extends State<_SignInPage> {
                           ? _strings.text('join')
                           : _strings.text('welcome'),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF6B7890),
-                      ),
+                      style: const TextStyle(fontSize: 13, color: _ortaMuted),
                     ),
                     const SizedBox(height: 24),
                     DropdownButtonFormField<Language>(
@@ -346,7 +502,7 @@ class _SignInPageState extends State<_SignInPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      TextField(
+                      if (widget.product == 'academy') TextField(
                         controller: _invite,
                         decoration: InputDecoration(
                           labelText: _strings.text('invite'),
@@ -377,10 +533,7 @@ class _SignInPageState extends State<_SignInPage> {
                       const SizedBox(height: 12),
                       Text(
                         _message!,
-                        style: const TextStyle(
-                          color: Color(0xFF6B7890),
-                          fontSize: 12,
-                        ),
+                        style: const TextStyle(color: _ortaMuted, fontSize: 12),
                       ),
                     ],
                     const SizedBox(height: 18),
@@ -404,9 +557,13 @@ class _SignInPageState extends State<_SignInPage> {
                       child: Text(
                         _register
                             ? _strings.text('switchToSignIn')
-                            : _strings.text('switchToCreate'),
+                            : widget.product == 'academy'
+                                ? 'New Academy student? Register with invitation code'
+                                : _strings.text('switchToCreate'),
                       ),
                     ),
+                    if (!_register) TextButton(onPressed: _busy ? null : _resetPassword, child: const Text('Forgot password?')),
+                    TextButton(onPressed: _busy ? null : widget.onBack, child: const Text('Back to ORTA choice')),
                   ],
                 ),
               ),
@@ -434,6 +591,9 @@ class _RoleWorkspace extends StatelessWidget {
     final language = LanguageExtension.fromCode(
       profile['interface_language'] as String? ?? 'en',
     );
+    if (profile['app_mode'] == 'personal') {
+      return _PersonalEntry(profile: profile, onLocaleChanged: onLocaleChanged);
+    }
     return _LiveRoleDashboard(
       key: ValueKey(language.code),
       role: role,
@@ -442,6 +602,64 @@ class _RoleWorkspace extends StatelessWidget {
       onLocaleChanged: onLocaleChanged,
     );
   }
+}
+
+class _ModeChooser extends StatelessWidget {
+  const _ModeChooser({required this.onChoose});
+  final Future<void> Function(String mode, String? code) onChoose;
+  @override
+  Widget build(BuildContext context) => Scaffold(body: Center(child: ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 520), child: Padding(padding: const EdgeInsets.all(28), child: Column(
+      mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('Choose your ORTA', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 20),
+        FilledButton.icon(onPressed: () => _choose(context, 'personal'), icon: const Icon(Icons.person_outline), label: const Text('Personal ORTA')),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(onPressed: () => _chooseAcademy(context), icon: const Icon(Icons.school_outlined), label: const Text('ORTA Academy')),
+      ],
+    )),
+  )));
+  Future<void> _choose(BuildContext context, String mode) async { try { await onChoose(mode, null); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save your choice: $error'))); } }
+  Future<void> _chooseAcademy(BuildContext context) async {
+    final controller = TextEditingController();
+    final code = await showDialog<String>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Founder code required'),
+      content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'Academy activation code')),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Continue'))],
+    ));
+    controller.dispose();
+    if (code == null || code.isEmpty || !context.mounted) return;
+    try { await onChoose('academy', code); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not activate Academy: $error'))); }
+  }
+}
+
+class _PersonalEntry extends StatefulWidget {
+  const _PersonalEntry({required this.profile, required this.onLocaleChanged});
+  final Map<String, dynamic> profile;
+  final ValueChanged<Locale> onLocaleChanged;
+  @override State<_PersonalEntry> createState() => _PersonalEntryState();
+}
+class _PersonalEntryState extends State<_PersonalEntry> {
+  final _code = TextEditingController(); String? _error; bool _busy = false;
+  @override void dispose() { _code.dispose(); super.dispose(); }
+  @override Widget build(BuildContext context) => Stack(children: [
+    OrtaApp(),
+    Positioned(right: 16, top: 16, child: SafeArea(child: TextButton.icon(
+      onPressed: _busy ? null : () async {
+        final code = await showDialog<String>(context: context, builder: (context) => AlertDialog(
+          title: const Text('Activate ORTA Academy'), content: TextField(controller: _code, decoration: InputDecoration(labelText: 'Founder code', errorText: _error)),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, _code.text), child: const Text('Activate'))],
+        ));
+        if (code == null || !mounted) return;
+        setState(() { _busy = true; _error = null; });
+        try {
+          final ok = await Supabase.instance.client.rpc('activate_orta_academy', params: {'p_code': code});
+          if (ok == true && mounted) { setState(() {}); } else if (mounted) { setState(() => _error = 'Code is invalid, expired, or already used.'); }
+        } catch (_) { if (mounted) setState(() => _error = 'Could not validate code. Please try again.'); }
+        if (mounted) setState(() => _busy = false);
+      }, icon: const Icon(Icons.school_outlined), label: Text(_busy ? 'Checking…' : 'Activate Academy'),
+    ))),
+  ]);
 }
 
 class _LiveRoleDashboard extends StatefulWidget {
@@ -919,115 +1137,264 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
           ),
         ],
       ),
-      body: _activeSection == LanguageOrtaAccess.moduleName
-          ? _languageOrta()
-          : FutureBuilder<List<Map<String, dynamic>>>(
-              future: _query(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text(
-                      _strings.text('couldNotLoad', {'section': _label(title)}),
-                    ),
-                  );
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final rows = snapshot.data!;
-                return ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    Text(
-                      widget.name.isEmpty
-                          ? _strings.text('welcomeNoName')
-                          : _strings.text('welcomeName', {'name': widget.name}),
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      '${_label(title)} · ${rows.length}',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 16),
-                    if (rows.isEmpty)
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(18),
-                          child: Text(_strings.text('workspaceReady')),
-                        ),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 320),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.025, 0),
+              end: Offset.zero,
+            ).animate(animation),
+            child: child,
+          ),
+        ),
+        child: _activeSection == LanguageOrtaAccess.moduleName
+            ? KeyedSubtree(
+                key: const ValueKey('language-orta'),
+                child: _languageOrta(),
+              )
+            : FutureBuilder<List<Map<String, dynamic>>>(
+                key: ValueKey(_activeSection),
+                future: _query(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        _strings.text('couldNotLoad', {
+                          'section': _label(title),
+                        }),
                       ),
-                    if (_busy) const LinearProgressIndicator(),
-                    for (final row in rows) ...[
-                      Card(
-                        child: ListTile(
-                          leading: Icon(
-                            widget.role == 'founder'
-                                ? Icons.school_outlined
-                                : widget.role == 'mentor'
-                                ? Icons.event_note_outlined
-                                : Icons.description_outlined,
-                            color: const Color(0xFF4568F5),
-                          ),
-                          title: Text(_rowTitle(row, title)),
-                          subtitle: Text(
-                            row.entries
-                                .where((e) => e.key != 'id')
-                                .map((e) => '${e.key}: ${e.value}')
-                                .join(' · '),
-                          ),
-                          trailing:
-                              widget.role == 'mentor' &&
-                                  title == 'Consultations' &&
-                                  row['status'] == 'scheduled'
-                              ? TextButton(
-                                  onPressed: () =>
-                                      _completeLesson(row['id'] as String),
-                                  child: Text(_strings.text('markConducted')),
-                                )
-                              : widget.role == 'student' &&
-                                    title == 'Consultations' &&
-                                    row['status'] == 'conducted'
-                              ? Wrap(
+                    );
+                  }
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final rows = snapshot.data!;
+                  return ListView(
+                    physics: const BouncingScrollPhysics(
+                      parent: AlwaysScrollableScrollPhysics(),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(23),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF6EB),
+                          borderRadius: BorderRadius.circular(26),
+                          border: Border.all(color: const Color(0xFFF1E3D1)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFD4A779)
+                                  .withValues(alpha: 0.12),
+                              blurRadius: 20,
+                              offset: const Offset(0, 7),
+                            ),
+                          ],
+                        ),
+                        child: CustomPaint(
+                          painter: _WarmRoadPainter(),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    TextButton(
-                                      onPressed: () => _confirmLesson(
-                                        row['id'] as String,
-                                        confirmed: true,
+                                    Text(
+                                      widget.name.isEmpty
+                                          ? _strings.text('welcomeNoName')
+                                          : _strings.text('welcomeName', {
+                                              'name': widget.name,
+                                            }),
+                                      style: const TextStyle(
+                                        fontSize: 23,
+                                        height: 1.18,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -0.5,
+                                        color: _ortaVioletDeep,
                                       ),
-                                      child: Text(_strings.text('confirm')),
                                     ),
-                                    TextButton(
-                                      onPressed: () => _confirmLesson(
-                                        row['id'] as String,
-                                        confirmed: false,
+                                    const SizedBox(height: 9),
+                                    Text(
+                                      _label(title),
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: _ortaSandInk,
                                       ),
-                                      child: Text(_strings.text('dispute')),
                                     ),
                                   ],
-                                )
-                              : widget.role == 'founder' &&
-                                    title == 'Applications' &&
-                                    row['status'] == 'unconditional_offer' &&
-                                    row['unconditional_offer_verified'] != true
-                              ? TextButton(
-                                  onPressed: () async {
-                                    await client.rpc(
-                                      'verify_unconditional_offer',
-                                      params: {'p_application_id': row['id']},
-                                    );
-                                    if (mounted) setState(() {});
-                                  },
-                                  child: Text(_strings.text('verifyOffer')),
-                                )
-                              : null,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Container(
+                                width: 54,
+                                height: 54,
+                                decoration: BoxDecoration(
+                                  color: _ortaViolet.withValues(alpha: 0.09),
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                                child: const Icon(
+                                  Icons.route_rounded,
+                                  color: _ortaViolet,
+                                  size: 27,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _label(title),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    color: _ortaInk,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1DECA),
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            child: Text(
+                              '${rows.length}',
+                              style: const TextStyle(
+                                color: _ortaSandInk,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (rows.isEmpty)
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Text(_strings.text('workspaceReady')),
+                          ),
+                        ),
+                      if (_busy) const LinearProgressIndicator(),
+                      for (final row in rows) ...[
+                        TweenAnimationBuilder<double>(
+                          key: ValueKey('$_activeSection-${row['id']}'),
+                          tween: Tween(begin: 0, end: 1),
+                          duration: const Duration(milliseconds: 420),
+                          curve: Curves.easeOutCubic,
+                          builder: (context, value, child) => Opacity(
+                            opacity: value,
+                            child: Transform.translate(
+                              offset: Offset(0, 14 * (1 - value)),
+                              child: child,
+                            ),
+                          ),
+                          child: Card(
+                            margin: const EdgeInsets.only(bottom: 11),
+                            clipBehavior: Clip.antiAlias,
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 7,
+                              ),
+                              leading: Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1DECA),
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                child: Icon(
+                                  widget.role == 'founder'
+                                      ? Icons.school_rounded
+                                      : widget.role == 'mentor'
+                                      ? Icons.event_note_rounded
+                                      : Icons.description_rounded,
+                                  color: _ortaSandInk,
+                                ),
+                              ),
+                              title: Text(_rowTitle(row, title)),
+                              subtitle: Text(
+                                row.entries
+                                    .where(
+                                      (e) => e.key != 'id' && e.value != null,
+                                    )
+                                    .map((e) => '${e.key}: ${e.value}')
+                                    .join(' · '),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing:
+                                  widget.role == 'mentor' &&
+                                      title == 'Consultations' &&
+                                      row['status'] == 'scheduled'
+                                  ? TextButton(
+                                      onPressed: () =>
+                                          _completeLesson(row['id'] as String),
+                                      child: Text(
+                                        _strings.text('markConducted'),
+                                      ),
+                                    )
+                                  : widget.role == 'student' &&
+                                        title == 'Consultations' &&
+                                        row['status'] == 'conducted'
+                                  ? Wrap(
+                                      children: [
+                                        TextButton(
+                                          onPressed: () => _confirmLesson(
+                                            row['id'] as String,
+                                            confirmed: true,
+                                          ),
+                                          child: Text(_strings.text('confirm')),
+                                        ),
+                                        TextButton(
+                                          onPressed: () => _confirmLesson(
+                                            row['id'] as String,
+                                            confirmed: false,
+                                          ),
+                                          child: Text(_strings.text('dispute')),
+                                        ),
+                                      ],
+                                    )
+                                  : widget.role == 'founder' &&
+                                        title == 'Applications' &&
+                                        row['status'] ==
+                                            'unconditional_offer' &&
+                                        row['unconditional_offer_verified'] !=
+                                            true
+                                  ? TextButton(
+                                      onPressed: () async {
+                                        await client.rpc(
+                                          'verify_unconditional_offer',
+                                          params: {
+                                            'p_application_id': row['id'],
+                                          },
+                                        );
+                                        if (mounted) setState(() {});
+                                      },
+                                      child: Text(_strings.text('verifyOffer')),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
-                );
-              },
-            ),
+                  );
+                },
+              ),
+      ),
     );
   }
 
@@ -1081,4 +1448,47 @@ class _LiveRoleDashboardState extends State<_LiveRoleDashboard> {
     return (row['title'] ?? row['name'] ?? row['status'] ?? fallback)
         .toString();
   }
+}
+
+class _WarmRoadPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final route = Path()
+      ..moveTo(size.width * 0.78, size.height * 1.1)
+      ..cubicTo(
+        size.width * 0.62,
+        size.height * 0.72,
+        size.width * 1.02,
+        size.height * 0.46,
+        size.width * 0.82,
+        size.height * -0.1,
+      );
+    canvas.drawPath(
+      route,
+      Paint()
+        ..color = const Color(0xFFD7A878).withValues(alpha: 0.15)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 15
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawPath(
+      route,
+      Paint()
+        ..color = const Color(0xFFC98750).withValues(alpha: 0.48)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round,
+    );
+    final dotPaint = Paint()
+      ..color = const Color(0xFFC98750).withValues(alpha: 0.65);
+    for (final metric in route.computeMetrics()) {
+      for (var distance = 0.0; distance < metric.length; distance += 11) {
+        final point = metric.getTangentForOffset(distance)?.position;
+        if (point != null) canvas.drawCircle(point, 1.7, dotPaint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WarmRoadPainter oldDelegate) => false;
 }

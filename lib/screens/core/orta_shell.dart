@@ -9,6 +9,8 @@ import '../../services/action_agent.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../services/product_strings.dart';
 
@@ -25,6 +27,7 @@ import '../../services/localization_service.dart';
 import '../../services/orta_agent_service.dart';
 import '../../services/agent_config.dart';
 import '../../services/remote_orta_agent_service.dart';
+import '../../services/language_practice_ai.dart';
 import '../../services/orta_localization.dart';
 import '../../widgets/language_selector.dart';
 import '../language_orta/language_orta_screen.dart';
@@ -146,6 +149,20 @@ class _OrtaShellState extends State<OrtaShell> {
     );
   }
 
+  void _openLanguageHome() {
+    final learning = _context.languages
+        .where((item) => item.isLearning)
+        .toList();
+    if (learning.isEmpty) {
+      _addLanguage();
+      return;
+    }
+    setState(() {
+      _selectedLanguageCode = learning.first.languageCode;
+      _languageMode = true;
+    });
+  }
+
   void _addLifeArea() {
     showModalBottomSheet<void>(
       context: context,
@@ -205,6 +222,10 @@ class _OrtaShellState extends State<OrtaShell> {
             )
             .level,
         lifeContext: _context,
+        coach: LanguagePracticeAi(
+          accessToken:
+              Supabase.instance.client.auth.currentSession?.accessToken,
+        ),
         practiceHistory: widget.repository
             .languageProgress(
               _selectedLanguageCode ?? _context.languages.first.languageCode,
@@ -216,7 +237,11 @@ class _OrtaShellState extends State<OrtaShell> {
           _selectedLanguageCode ?? _context.languages.first.languageCode,
           phrase,
         ),
-        onBack: () => setState(() => _languageMode = false),
+        onOpenAgent: _openAgent,
+        onBack: () => setState(() {
+          _languageMode = false;
+          _index = 0;
+        }),
         currentLocale: widget.currentLocale,
       );
     }
@@ -227,6 +252,18 @@ class _OrtaShellState extends State<OrtaShell> {
         data: widget.repository.data,
         onSelectEntity: (type, id) => _openAgent(type: type, id: id),
       ),
+      AgentSheet(
+        embedded: true,
+        onClose: () => setState(() => _index = 0),
+        repository: widget.repository,
+        contextBuilder: () => _agentContext(),
+        agentService: useRemoteOrtaAgent
+            ? RemoteOrtaAgentService()
+            : MockOrtaAgentService(),
+      ),
+      const SizedBox.shrink(),
+      ProgressView(items: _progress, language: _context.interfaceLanguage),
+      /* Plan and Life stay accessible through the Home dashboard and AI tools. */
       PlanView(
         data: widget.repository.data,
         onPreferences: () => showDialog<void>(
@@ -250,10 +287,12 @@ class _OrtaShellState extends State<OrtaShell> {
         onAddRecord: () => _addRecord(),
         onSelectEntity: (type, id) => _openAgent(type: type, id: id),
         onAddLanguage: _addLanguage,
-        onOpenLanguage: _context.languages.isEmpty
+        onOpenLanguage: !_context.languages.any((item) => item.isLearning)
             ? null
             : () => setState(() {
-                _selectedLanguageCode = _context.languages.first.languageCode;
+                _selectedLanguageCode = _context.languages
+                    .firstWhere((item) => item.isLearning)
+                    .languageCode;
                 _languageMode = true;
               }),
         onSelectLanguage: (code) => setState(() {
@@ -262,7 +301,6 @@ class _OrtaShellState extends State<OrtaShell> {
         }),
         onReset: widget.onResetOnboarding,
       ),
-      ProgressView(items: _progress, language: _context.interfaceLanguage),
     ];
     return Scaffold(
       appBar: AppBar(
@@ -279,31 +317,38 @@ class _OrtaShellState extends State<OrtaShell> {
       body: Stack(
         children: [
           screens[_index],
-          Positioned(
-            right: 18,
-            bottom: 18,
-            child: AgentButton(onPressed: _openAgent),
-          ),
+          if (_index != 1)
+            Positioned(
+              right: 18,
+              bottom: 18,
+              child: AgentButton(onPressed: _openAgent),
+            ),
         ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
+        onDestinationSelected: (value) {
+          if (value == 2) {
+            _openLanguageHome();
+            return;
+          }
+          setState(() => _index = value);
+        },
         destinations: [
           NavigationDestination(
             icon: const Icon(Icons.home_outlined),
             selectedIcon: const Icon(Icons.home),
             label: _label('home'),
           ),
-          NavigationDestination(
-            icon: const Icon(Icons.calendar_month_outlined),
-            selectedIcon: const Icon(Icons.calendar_month),
-            label: _label('plan'),
+          const NavigationDestination(
+            icon: Icon(Icons.auto_awesome_outlined),
+            selectedIcon: Icon(Icons.auto_awesome),
+            label: 'ORTA AI',
           ),
           NavigationDestination(
-            icon: const Icon(Icons.account_tree_outlined),
-            selectedIcon: const Icon(Icons.account_tree),
-            label: _label('life'),
+            icon: const Icon(Icons.translate_outlined),
+            selectedIcon: const Icon(Icons.translate),
+            label: 'Language ORTA',
           ),
           NavigationDestination(
             icon: const Icon(Icons.insights_outlined),
@@ -343,6 +388,62 @@ class _OrtaShellState extends State<OrtaShell> {
                   },
                 ),
               Text(productText(language, 'privacy')),
+              const Divider(height: 24),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Sign out'),
+                onTap: () async {
+                  Navigator.pop(dialogContext);
+                  await Supabase.instance.client.auth.signOut();
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.delete_forever_outlined,
+                  color: Colors.red,
+                ),
+                title: const Text(
+                  'Delete account',
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () async {
+                  final confirm = await showDialog<bool>(
+                    context: dialogContext,
+                    builder: (confirmContext) => AlertDialog(
+                      title: const Text('Delete your account?'),
+                      content: const Text(
+                        'This permanently deletes your account and its associated data.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(confirmContext, false),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(confirmContext, true),
+                          child: const Text('Delete account'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm != true || !dialogContext.mounted) return;
+                  try {
+                    await Supabase.instance.client.functions.invoke(
+                      'delete-account',
+                    );
+                    await Supabase.instance.client.auth.signOut();
+                  } catch (_) {
+                    if (dialogContext.mounted)
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Account deletion is not configured. Contact ORTA support.',
+                          ),
+                        ),
+                      );
+                  }
+                },
+              ),
             ],
           ),
         ),
@@ -859,11 +960,15 @@ class AgentSheet extends StatefulWidget {
   final AgentContext Function() contextBuilder;
   final LifeRepository repository;
   final OrtaAgentService agentService;
+  final bool embedded;
+  final VoidCallback? onClose;
   const AgentSheet({
     super.key,
     required this.contextBuilder,
     required this.repository,
     required this.agentService,
+    this.embedded = false,
+    this.onClose,
   });
   @override
   State<AgentSheet> createState() => _AgentSheetState();
@@ -871,6 +976,9 @@ class AgentSheet extends StatefulWidget {
 
 class _AgentSheetState extends State<AgentSheet> {
   final _controller = TextEditingController();
+  final _imagePicker = ImagePicker();
+  Uint8List? _attachedImage;
+  String? _attachedMimeType;
   late final OrtaAgentService _service = widget.agentService;
   ToolRegistry? _registry;
   List<AgentMessage> get _messages => widget.repository.data.conversation;
@@ -1011,7 +1119,7 @@ class _AgentSheetState extends State<AgentSheet> {
 
   Future<void> _send({String? text, bool retry = false}) async {
     final message = (text ?? _controller.text).trim();
-    if (message.isEmpty || _sending) return;
+    if ((message.isEmpty && _attachedImage == null) || _sending) return;
     if (message.length > 8000) {
       setState(() => _error = productText(_language, 'tooLong'));
       return;
@@ -1023,10 +1131,32 @@ class _AgentSheetState extends State<AgentSheet> {
       _failedText = null;
     });
     try {
+      final image = _attachedImage;
+      final mimeType = _attachedMimeType;
+      final requestText = message.isEmpty
+          ? productText(_language, 'imageQuestion')
+          : message;
+      var agentMessage = requestText;
+      if (image != null && mimeType != null) {
+        if (_service is! RemoteOrtaAgentService) {
+          throw RemoteAgentException(productText(_language, 'providerError'));
+        }
+        final description = await _service.analyzeImage(
+          bytes: image,
+          mimeType: mimeType,
+          message: requestText,
+          context: widget.contextBuilder(),
+        );
+        agentMessage =
+            '$requestText\n\nImage analysis (user attached):\n$description';
+      }
       final last = _messages.lastOrNull;
-      if (!retry || last?.isUser != true || last?.text != message) {
+      final visibleMessage = image == null
+          ? requestText
+          : '$requestText · ${productText(_language, 'imageAttached')}';
+      if (!retry || last?.isUser != true || last?.text != visibleMessage) {
         await widget.repository.appendMessage(
-          message,
+          visibleMessage,
           isUser: true,
           conversationId: conversationId,
         );
@@ -1041,7 +1171,7 @@ class _AgentSheetState extends State<AgentSheet> {
           widget.repository,
           _service,
           registry,
-        ).respond(message, widget.contextBuilder);
+        ).respond(agentMessage, widget.contextBuilder);
       } else {
         final result = await _service.respond(
           message,
@@ -1057,6 +1187,12 @@ class _AgentSheetState extends State<AgentSheet> {
         isUser: false,
         conversationId: conversationId,
       );
+      if (image != null && mounted) {
+        setState(() {
+          _attachedImage = null;
+          _attachedMimeType = null;
+        });
+      }
     } on RemoteAgentException catch (error) {
       if (mounted) {
         setState(() {
@@ -1073,6 +1209,43 @@ class _AgentSheetState extends State<AgentSheet> {
       }
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _pickImage() async {
+    if (_sending) return;
+    try {
+      final file = await _imagePicker.pickImage(source: ImageSource.gallery);
+      if (file == null || !mounted) return;
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      if (bytes.length > 5 * 1024 * 1024) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(productText(_language, 'imageTooLarge'))),
+        );
+        return;
+      }
+      final extension = file.name.toLowerCase().split('.').last;
+      final mimeType = switch (extension) {
+        'jpg' || 'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+        _ => null,
+      };
+      if (mimeType == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(productText(_language, 'unsupportedImage'))),
+        );
+        return;
+      }
+      setState(() {
+        _attachedImage = bytes;
+        _attachedMimeType = mimeType;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = productText(_language, 'imageError'));
+      }
     }
   }
 
@@ -1312,7 +1485,7 @@ class _AgentSheetState extends State<AgentSheet> {
           child: SizedBox(
             height:
                 MediaQuery.sizeOf(context).height *
-                (_expanded || keyboard ? .94 : .52),
+                (widget.embedded ? 1 : (_expanded || keyboard ? .94 : .52)),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -1350,7 +1523,8 @@ class _AgentSheetState extends State<AgentSheet> {
                       ),
                       IconButton(
                         tooltip: productText(_language, 'close'),
-                        onPressed: () => Navigator.pop(context),
+                        onPressed:
+                            widget.onClose ?? () => Navigator.pop(context),
                         icon: const Icon(Icons.close),
                       ),
                     ],
@@ -1377,8 +1551,43 @@ class _AgentSheetState extends State<AgentSheet> {
                           ),
                   ),
                   const SizedBox(height: 8),
+                  if (_attachedImage != null) ...[
+                    Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.memory(
+                            _attachedImage!,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(productText(_language, 'imageAttached')),
+                        ),
+                        IconButton(
+                          tooltip: productText(_language, 'removeImage'),
+                          onPressed: _sending
+                              ? null
+                              : () => setState(() {
+                                  _attachedImage = null;
+                                  _attachedMimeType = null;
+                                }),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   Row(
                     children: [
+                      IconButton(
+                        tooltip: productText(_language, 'attachImage'),
+                        onPressed: _sending ? null : _pickImage,
+                        icon: const Icon(Icons.image_outlined),
+                      ),
                       Expanded(
                         child: TextField(
                           controller: _controller,

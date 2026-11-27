@@ -20,6 +20,18 @@ class DailyOverview extends StatelessWidget {
     final strings = AppLocalizations(AppLocaleExtension.fromLanguage(language));
     final commitments = engine.onDay(engine.today),
         recommendations = engine.recommendations();
+    final todayTasks =
+        data.tasks
+            .where((task) => !task.completed && task.dueDate == engine.today)
+            .toList()
+          ..sort((a, b) => a.title.compareTo(b.title));
+    final openTasks =
+        data.tasks
+            .where((task) => !task.completed && task.dueDate != engine.today)
+            .toList()
+          ..sort(
+            (a, b) => (a.dueDate ?? '9999').compareTo(b.dueDate ?? '9999'),
+          );
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 112),
@@ -28,14 +40,14 @@ class DailyOverview extends StatelessWidget {
             padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF087F73), Color(0xFF10B9A2)],
+                colors: [Color(0xFF292660), Color(0xFF403B9D)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(26),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF087F73).withValues(alpha: 0.18),
+                  color: const Color(0xFF403B9D).withValues(alpha: 0.20),
                   blurRadius: 22,
                   offset: const Offset(0, 10),
                 ),
@@ -102,34 +114,70 @@ class DailyOverview extends StatelessWidget {
           const SizedBox(height: 22),
           _PlanningCard(
             title: planningText(language, 'commitments'),
-            children: commitments.isEmpty
+            children: commitments.isEmpty && todayTasks.isEmpty
                 ? [_EmptyAgenda(text: planningText(language, 'empty'))]
-                : commitments
-                      .take(5)
-                      .map(
-                        (o) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE8F7F4),
-                              borderRadius: BorderRadius.circular(14),
+                : [
+                    ...commitments
+                        .take(5)
+                        .map(
+                          (o) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1DECA),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Icon(
+                                Icons.event_available_rounded,
+                                color: Color(0xFF403B9D),
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.event_available_rounded,
-                              color: Color(0xFF078F7D),
-                            ),
+                            title: Text(o.event.title),
+                            subtitle: Text(occurrenceTime(language, o)),
+                            trailing: const Icon(Icons.chevron_right_rounded),
+                            onTap: () =>
+                                onSelect?.call('calendar_event', o.event.id),
                           ),
-                          title: Text(o.event.title),
-                          subtitle: Text(occurrenceTime(language, o)),
-                          trailing: const Icon(Icons.chevron_right_rounded),
-                          onTap: () =>
-                              onSelect?.call('calendar_event', o.event.id),
                         ),
-                      )
-                      .toList(),
+                    ...todayTasks.map(
+                      (task) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(
+                          Icons.checklist_rounded,
+                          color: Color(0xFF403B9D),
+                        ),
+                        title: Text(task.title),
+                        subtitle: Text(planningText(language, 'taskDueToday')),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => onSelect?.call('task', task.id),
+                      ),
+                    ),
+                  ],
           ),
+          if (openTasks.isNotEmpty)
+            _PlanningCard(
+              title: planningText(language, 'openTasks'),
+              children: openTasks
+                  .take(5)
+                  .map(
+                    (task) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.radio_button_unchecked_rounded,
+                        color: Color(0xFF403B9D),
+                      ),
+                      title: Text(task.title),
+                      subtitle: task.dueDate == null
+                          ? null
+                          : Text(planningDate(language, task.dueDate!)),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => onSelect?.call('task', task.id),
+                    ),
+                  )
+                  .toList(),
+            ),
           if (recommendations.isNotEmpty)
             _PlanningCard(
               title: planningText(language, 'focus'),
@@ -144,7 +192,7 @@ class DailyOverview extends StatelessWidget {
                             : Icons.auto_awesome_rounded,
                         color: r.code == 'conflict' || r.code == 'overload'
                             ? const Color(0xFFD78A25)
-                            : const Color(0xFF078F7D),
+                            : const Color(0xFF403B9D),
                       ),
                       title: Text(
                         recommendationText(
@@ -528,12 +576,12 @@ class _EmptyAgenda extends StatelessWidget {
     margin: const EdgeInsets.only(top: 8, bottom: 5),
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: const Color(0xFFF2F8F7),
+      color: const Color(0xFFF1DECA),
       borderRadius: BorderRadius.circular(16),
     ),
     child: Row(
       children: [
-        const Icon(Icons.event_note_rounded, color: Color(0xFF078F7D)),
+        const Icon(Icons.event_note_rounded, color: Color(0xFF93603A)),
         const SizedBox(width: 12),
         Expanded(child: Text(text)),
       ],

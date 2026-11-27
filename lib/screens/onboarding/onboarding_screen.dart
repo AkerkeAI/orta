@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_theme.dart';
 import '../../models/language.dart';
 import '../../models/life_context.dart';
+import '../../models/language_definition.dart';
 import '../../services/goal_suggestion_service.dart';
 import '../../services/life_context_interpreter.dart';
 import '../../services/localization_service.dart';
@@ -35,6 +36,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   List<String> _interpretation = [];
   List<GoalContext> _suggestions = [];
   final Set<String> _selectedGoals = {};
+  final Map<String, String> _knownLanguageLevels = {};
+  String? _targetLanguageCode;
+  String? _targetLanguageLevel;
+  bool _languageInvalid = false;
 
   bool _nameInvalid = false;
   bool _lifeInvalid = false;
@@ -91,6 +96,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       setState(() => _lifeInvalid = true);
       return;
     }
+    if (_step == 5 &&
+        (_targetLanguageCode == null ||
+            _targetLanguageLevel == null ||
+            _knownLanguageLevels.values.any((level) => level.isEmpty))) {
+      setState(() => _languageInvalid = true);
+      return;
+    }
     if (_step == 3) {
       _interpretation =
           _areas.contains(LifeArea.other) &&
@@ -114,7 +126,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _goalsGenerated = true;
       }
     }
-    if (_step < 5) _goToStep(_step + 1);
+    if (_step < 6) _goToStep(_step + 1);
   }
 
   void _finish() {
@@ -129,6 +141,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       goals: _suggestions
           .where((goal) => _selectedGoals.contains(goal.id))
           .toList(),
+      languages: [
+        for (final entry in _knownLanguageLevels.entries)
+          LanguageContext(
+            languageCode: entry.key,
+            knownLevel: entry.value,
+            isKnown: true,
+            isLearning: entry.key == _targetLanguageCode,
+            level: entry.key == _targetLanguageCode
+                ? _targetLanguageLevel!
+                : '',
+          ),
+        if (_targetLanguageCode != null &&
+            !_knownLanguageLevels.containsKey(_targetLanguageCode))
+          LanguageContext(
+            languageCode: _targetLanguageCode!,
+            level: _targetLanguageLevel!,
+          ),
+      ],
     );
     widget.onComplete(draft);
   }
@@ -192,7 +222,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       onPressed: () => _goToStep(_step - 1),
                       child: Text(t('back')),
                     ),
-                  if (_step < 5)
+                  if (_step < 6)
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -230,6 +260,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       case 4:
         return _goals();
       case 5:
+        return _languageSetup();
+      case 6:
         return _summary();
       default:
         return const SizedBox();
@@ -410,6 +442,82 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           _interpretation
               .map((item) => _strings.interpretation(item))
               .join(' · '),
+        ),
+    ],
+  );
+
+  Widget _languageSetup() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text(
+        'Languages you know',
+        style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+      ),
+      const Text('Select languages you know and set a level for each.'),
+      Wrap(
+        spacing: 8,
+        children: [
+          for (final language in LanguageDefinition.all)
+            FilterChip(
+              label: Text(language.englishName),
+              selected: _knownLanguageLevels.containsKey(language.code),
+              onSelected: (yes) => setState(() {
+                if (yes) {
+                  _knownLanguageLevels[language.code] = '';
+                } else {
+                  _knownLanguageLevels.remove(language.code);
+                }
+              }),
+            ),
+        ],
+      ),
+      for (final entry in _knownLanguageLevels.entries.toList())
+        DropdownButtonFormField<String>(
+          key: ValueKey(entry.key),
+          initialValue: entry.value.isEmpty ? null : entry.value,
+          decoration: InputDecoration(
+            labelText:
+                '${LanguageDefinition.byCode(entry.key).englishName} level',
+          ),
+          items: [
+            for (final l in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])
+              DropdownMenuItem(value: l, child: Text(l)),
+          ],
+          onChanged: (value) =>
+              setState(() => _knownLanguageLevels[entry.key] = value ?? ''),
+        ),
+      const SizedBox(height: 20),
+      const Text('Language to learn'),
+      DropdownButtonFormField<String>(
+        initialValue: _targetLanguageCode,
+        items: [
+          for (final language in LanguageDefinition.all)
+            DropdownMenuItem(
+              value: language.code,
+              child: Text(language.englishName),
+            ),
+        ],
+        onChanged: (value) => setState(() {
+          _targetLanguageCode = value;
+          _languageInvalid = false;
+        }),
+      ),
+      DropdownButtonFormField<String>(
+        initialValue: _targetLanguageLevel,
+        decoration: const InputDecoration(labelText: 'Current level'),
+        items: [
+          for (final l in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])
+            DropdownMenuItem(value: l, child: Text(l)),
+        ],
+        onChanged: (value) => setState(() {
+          _targetLanguageLevel = value;
+          _languageInvalid = false;
+        }),
+      ),
+      if (_languageInvalid)
+        const Text(
+          'Choose the language and level to continue.',
+          style: TextStyle(color: Colors.red),
         ),
     ],
   );

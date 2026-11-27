@@ -78,6 +78,38 @@ const Map<String, List<String>> productCopy = {
   ],
   "message": ["Message ORTA", "Напишите ORTA", "ORTA-ға жазыңыз"],
   "send": ["Send message", "Отправить сообщение", "Хабарлама жіберу"],
+  "attachImage": ["Attach an image", "Прикрепить изображение", "Сурет тіркеу"],
+  "removeImage": ["Remove image", "Убрать изображение", "Суретті алып тастау"],
+  "imageTooLarge": [
+    "Choose an image smaller than 5 MB.",
+    "Выберите изображение размером до 5 МБ.",
+    "5 МБ-тан кіші суретті таңдаңыз.",
+  ],
+  "unsupportedImage": [
+    "Choose a JPG, PNG or WebP image.",
+    "Выберите изображение JPG, PNG или WebP.",
+    "JPG, PNG немесе WebP суретін таңдаңыз.",
+  ],
+  "imageAttached": [
+    "Image attached",
+    "Изображение прикреплено",
+    "Сурет тіркелді",
+  ],
+  "imageQuestion": [
+    "Please analyze this image and tell me how you can help.",
+    "Пожалуйста, проанализируй изображение и предложи, чем можешь помочь.",
+    "Осы суретті талдап, қалай көмектесе алатыныңды айт.",
+  ],
+  "imageError": [
+    "Could not open that image. Try another one.",
+    "Не удалось открыть изображение. Попробуйте другое.",
+    "Суретті ашу мүмкін болмады. Басқасын көріңіз.",
+  ],
+  "providerError": [
+    "Image analysis needs the connected ORTA AI service.",
+    "Для анализа изображения нужно подключение к ORTA AI.",
+    "Суретті талдау үшін ORTA AI қызметіне қосылу қажет.",
+  ],
   "thinking": ["ORTA is thinking…", "ORTA думает…", "ORTA ойланып жатыр…"],
   "welcome": [
     "What would you like to talk about?",

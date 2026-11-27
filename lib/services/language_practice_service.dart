@@ -41,7 +41,9 @@ class LanguagePracticeService {
     required PracticeSkill skill,
     required PracticeScenario scenario,
     ApprovedLanguageContext context = const ApprovedLanguageContext(),
+    int variation = 0,
   }) {
+    final version = variation % 3;
     final setting = switch (scenario) {
       PracticeScenario.everyday => 'an everyday conversation',
       PracticeScenario.universityInterview => 'a university interview',
@@ -59,14 +61,26 @@ class LanguagePracticeService {
     final levelHint =
         'Keep the language around $level. Do not invent application facts.';
     final prompt = switch (skill) {
-      PracticeSkill.speaking =>
-        'In $languageName, speak as if you are in $setting. Type the words you would say. $levelHint',
-      PracticeSkill.writing =>
-        'In $languageName, write 6–10 sentences for $setting. $levelHint',
-      PracticeSkill.listening =>
-        'Read this $languageName listening rehearsal (audio is not available), then answer in $languageName. $levelHint',
-      PracticeSkill.reading =>
-        'Read the $languageName passage, then answer the question in $languageName. $levelHint',
+      PracticeSkill.speaking => [
+        'In $languageName, describe one place where you like to learn and explain why. Speak as if you are in $setting. $levelHint',
+        'In $languageName, explain a small problem you solved and what you learned. Speak as if you are in $setting. $levelHint',
+        'In $languageName, describe a goal you care about and one step you will take next. Speak as if you are in $setting. $levelHint',
+      ][version],
+      PracticeSkill.writing => [
+        'In $languageName, write a short message inviting someone to join an activity. Include when, where and why. $levelHint',
+        'In $languageName, compare two ways to learn something new and explain which you prefer. $levelHint',
+        'In $languageName, write a short note describing a challenge and asking for one helpful suggestion. $levelHint',
+      ][version],
+      PracticeSkill.listening => [
+        'Listen to the short audio and answer: What is the speaker planning to do, and why? Answer in $languageName. $levelHint',
+        'Listen to the short audio and answer: What changed in the plan? Answer in $languageName. $levelHint',
+        'Listen to the short audio and answer: Which detail helped solve the problem? Answer in $languageName. $levelHint',
+      ][version],
+      PracticeSkill.reading => [
+        'Read the passage and answer: Why did the student change their plan? Answer in $languageName. $levelHint',
+        'Read the passage and answer: Which detail helped the group make a decision? Answer in $languageName. $levelHint',
+        'Read the passage and answer: What would the main character most likely do next? Use a clue from the text. Answer in $languageName. $levelHint',
+      ][version],
       PracticeSkill.vocabulary =>
         'In $languageName, write 5 useful phrases you could use in $setting and use each in a short sentence. $levelHint',
       PracticeSkill.scenario =>
@@ -75,40 +89,25 @@ class LanguagePracticeService {
         'Have a natural $languageName conversation for $setting. Reply to the tutor in complete sentences. $levelHint',
     };
     final stimulus = switch (skill) {
-      PracticeSkill.listening || PracticeSkill.reading =>
-        _stimulus(languageName, level, scenario, context),
-      PracticeSkill.conversation =>
-        'Tutor: Hello. Thank you for joining me today. Could you briefly introduce yourself and say why this conversation matters to you?',
+      PracticeSkill.listening => _listeningStimulus(version),
+      PracticeSkill.reading => _readingStimulus(version),
+      PracticeSkill.conversation => 'Tutor: Hello. Thank you for joining me today. Could you briefly introduce yourself and say why this conversation matters to you?',
       _ => '',
     };
     return PracticePrompt(prompt: prompt, stimulus: stimulus);
   }
 
-  static String _stimulus(
-    String languageName,
-    String level,
-    PracticeScenario scenario,
-    ApprovedLanguageContext context,
-  ) {
-    final major = context.intendedMajor?.trim();
-    final subject = (major != null && major.isNotEmpty)
-        ? major
-        : 'your intended field of study';
-    return switch (scenario) {
-      PracticeScenario.universityInterview =>
-        'A short $languageName rehearsal ($level): “We would like to understand your motivation. Please tell us about $subject and one challenge you hope to work on. You do not need to quote any real application essay.”',
-      PracticeScenario.scholarshipInterview =>
-        'A short $languageName rehearsal ($level): “Scholarships support students who can explain their goals clearly. Describe one academic goal and one way you would contribute to a community.”',
-      PracticeScenario.personalProject =>
-        'A short $languageName rehearsal ($level): “Imagine presenting a project. Explain the problem, what you built, and the next step. Use a fictional example if you prefer.”',
-      PracticeScenario.professionalIntro =>
-        'A short $languageName rehearsal ($level): “In professional settings, a clear introduction includes your name role, one strength, and what you are looking for.”',
-      PracticeScenario.intendedMajor =>
-        'A short $languageName rehearsal ($level): “Many students change their minds. Explain what draws you to $subject and one question you still have.”',
-      PracticeScenario.everyday =>
-        'A short $languageName rehearsal ($level): “You meet a classmate after school. They ask about your day, a class you enjoyed, and plans for the weekend.”',
-    };
-  }
+  static String _listeningStimulus(int version) => [
+    'Hello, I am planning a small study group for Friday. We will meet in the library after class because it is quieter than the café. Please bring one question from the chapter.',
+    'Our class visit was going to be on Tuesday, but the science room is being repaired. The teacher moved it to Thursday and asked everyone to bring a notebook instead of a lunch.',
+    'Mira could not find the project map, so she checked the last page of her notebook. There she saw a note with the room number. The team arrived just before the presentation began.',
+  ][version];
+
+  static String _readingStimulus(int version) => [
+    'Nora planned to study at the park, but a sudden rainstorm changed her mind. She went to the community library instead. A classmate was already there and offered to review the science notes together. They finished one chapter and agreed to meet again next week.',
+    'The school garden team could not agree on what to plant. One group wanted flowers, while another wanted vegetables. They checked how much sunlight each bed received and chose herbs for the shaded corner. Everyone helped label the new plants.',
+    'When Amir arrived at the club, the room was locked. He noticed a message on the noticeboard saying the meeting had moved to the art studio. He followed the signs and arrived in time to help his friends prepare their display.',
+  ][version];
 
   static PracticeScenario recommendedScenario(ApprovedLanguageContext context) {
     if (context.preparingUniversity) {

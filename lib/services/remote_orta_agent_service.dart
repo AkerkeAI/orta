@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/life_context.dart';
 import '../models/language.dart';
@@ -26,6 +28,62 @@ class RemoteOrtaAgentService implements OrtaAgentService {
     this.timeout = const Duration(seconds: 75),
   }) : client = client ?? http.Client();
 
+  Map<String, String> get _requestHeaders {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    try {
+      final token = Supabase.instance.client.auth.currentSession?.accessToken;
+      if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+    } catch (_) {
+      // The backend rejects unauthenticated requests; this keeps local setup errors clear.
+    }
+    return headers;
+  }
+
+  Future<String> analyzeImage({
+    required Uint8List bytes,
+    required String mimeType,
+    required String message,
+    required AgentContext context,
+  }) async {
+    try {
+      final response = await client
+          .post(
+            Uri.parse('$baseUrl/api/agent/image'),
+            headers: _requestHeaders,
+            body: jsonEncode({
+              'message': message,
+              'mimeType': mimeType,
+              'imageBase64': base64Encode(bytes),
+              'locale': context.relevantLifeContext.interfaceLanguage.code,
+            }),
+          )
+          .timeout(timeout);
+      final dynamic body = jsonDecode(response.body);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw RemoteAgentException(
+          _error(
+            body is Map
+                ? body['code'] as String? ?? 'provider_error'
+                : 'provider_error',
+            context,
+          ),
+        );
+      }
+      if (body is! Map ||
+          body['description'] is! String ||
+          (body['description'] as String).trim().isEmpty) {
+        throw RemoteAgentException(_error('invalid_response', context));
+      }
+      return body['description'] as String;
+    } on RemoteAgentException {
+      rethrow;
+    } on TimeoutException {
+      throw RemoteAgentException(_error('network', context));
+    } catch (_) {
+      throw RemoteAgentException(_error('network', context));
+    }
+  }
+
   @override
   Future<MockAgentResult> respond(
     String message,
@@ -46,7 +104,7 @@ class RemoteOrtaAgentService implements OrtaAgentService {
       final response = await client
           .post(
             Uri.parse('$baseUrl/api/agent/message'),
-            headers: const {'Content-Type': 'application/json'},
+            headers: _requestHeaders,
             body: jsonEncode({
               'message': message,
               'locale': context.relevantLifeContext.interfaceLanguage.code,
@@ -111,7 +169,7 @@ class RemoteOrtaAgentService implements OrtaAgentService {
       final response = await client
           .post(
             Uri.parse('$baseUrl/api/agent/message'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _requestHeaders,
             body: jsonEncode({
               'message': message,
               'locale': context.relevantLifeContext.interfaceLanguage.code,

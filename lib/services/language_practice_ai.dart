@@ -24,6 +24,8 @@ class LanguagePracticeAi {
     required PracticeSkill skill,
     required PracticeScenario scenario,
     ApprovedLanguageContext context = const ApprovedLanguageContext(),
+    String previousPrompt = '',
+    int variation = 0,
   }) async {
     final local = LanguagePracticeService.localPrompt(
       languageName: profile.displayName,
@@ -31,6 +33,7 @@ class LanguagePracticeAi {
       skill: skill,
       scenario: scenario,
       context: context,
+      variation: variation,
     );
     try {
       final body = await _post({
@@ -39,6 +42,7 @@ class LanguagePracticeAi {
         'level': profile.currentLevel,
         'skill': skill.name,
         'scenario': scenario.name,
+        'prompt': previousPrompt,
         'approvedContext': context.toSafeJson(),
       });
       final prompt = body['prompt'] as String? ?? '';
@@ -50,6 +54,35 @@ class LanguagePracticeAi {
     } on LanguagePracticeAiUnavailable {
       return local;
     }
+  }
+
+  Future<String> chat({
+    required LanguageProfile profile,
+    required PracticeSkill skill,
+    required PracticeScenario scenario,
+    required String message,
+    required String interfaceLanguage,
+    List<Map<String, String>> history = const [],
+    ApprovedLanguageContext context = const ApprovedLanguageContext(),
+  }) async {
+    final body = await _post({
+      'action': 'chat',
+      'languageName': profile.displayName,
+      'level': profile.currentLevel,
+      'skill': skill.name,
+      'scenario': scenario.name,
+      'message': message,
+      'interfaceLanguage': interfaceLanguage,
+      'chatHistory': history,
+      'approvedContext': context.toSafeJson(),
+    });
+    final reply = (body['tutorReply'] as String? ?? '').trim();
+    if (reply.isEmpty) {
+      throw const LanguagePracticeAiUnavailable(
+        'The AI tutor returned an empty reply.',
+      );
+    }
+    return reply;
   }
 
   Future<LanguageCoachFeedback> evaluate({

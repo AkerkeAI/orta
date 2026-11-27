@@ -13,7 +13,7 @@ export interface ApprovedLanguageContext {
 }
 
 export interface LanguagePracticeRequest {
-  action: 'start' | 'evaluate';
+  action: 'start' | 'evaluate' | 'chat';
   languageName: string;
   level: string;
   skill: PracticeSkill;
@@ -22,6 +22,9 @@ export interface LanguagePracticeRequest {
   stimulus?: string;
   response?: string;
   transcript?: string;
+  message?: string;
+  interfaceLanguage?: 'en' | 'ru' | 'kk';
+  chatHistory?: { role: 'user' | 'assistant'; content: string }[];
   approvedContext?: ApprovedLanguageContext;
 }
 
@@ -42,13 +45,25 @@ const LEVELS = new Set(['A1','A2','B1','B2','C1','C2']);
 export function validLanguagePracticeRequest(body: unknown): body is LanguagePracticeRequest {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
   const value = body as Record<string, unknown>;
-  if (value.action !== 'start' && value.action !== 'evaluate') return false;
+  if (value.action !== 'start' && value.action !== 'evaluate' && value.action !== 'chat') return false;
   if (typeof value.languageName !== 'string' || !value.languageName.trim() || value.languageName.length > 80) return false;
   if (typeof value.level !== 'string' || !LEVELS.has(value.level)) return false;
   if (!PRACTICE_SKILLS.includes(value.skill as PracticeSkill)) return false;
   if (!PRACTICE_SCENARIOS.includes(value.scenario as PracticeScenario)) return false;
-  for (const field of ['prompt','stimulus','response','transcript']) {
+  for (const field of ['prompt','stimulus','response','transcript','message']) {
     if (value[field] !== undefined && (typeof value[field] !== 'string' || (value[field] as string).length > 8000)) return false;
+  }
+  if (value.action === 'chat') {
+    if (typeof value.message !== 'string' || !value.message.trim() || value.message.length > 2000) return false;
+    if (!['en','ru','kk'].includes(value.interfaceLanguage as string)) return false;
+    if (value.chatHistory !== undefined && (
+      !Array.isArray(value.chatHistory) || value.chatHistory.length > 12 ||
+      !value.chatHistory.every(turn => turn && typeof turn === 'object' &&
+        ['user','assistant'].includes((turn as Record<string, unknown>).role as string) &&
+        typeof (turn as Record<string, unknown>).content === 'string' &&
+        ((turn as Record<string, unknown>).content as string).length <= 2000 &&
+        Object.keys(turn as Record<string, unknown>).every(key => ['role','content'].includes(key)))
+    )) return false;
   }
   if (value.action === 'evaluate' && (typeof value.response !== 'string' || !value.response.trim())) return false;
   if (value.approvedContext !== undefined) {
@@ -81,11 +96,32 @@ export function buildUserMessage(request: LanguagePracticeRequest): string {
     preparingUniversity: Boolean(context.preparingUniversity),
     hasProject: Boolean(context.hasProject),
   });
+  if (request.action === 'chat') {
+    return `Answer the student's question about language learning or this ${request.skill} exercise in ${request.languageName} at ${request.level}.
+Reply in the student's interface language (${request.interfaceLanguage}). When useful, include a short example in ${request.languageName} and explain it in the interface language.
+Student question: ${request.message ?? ''}
+Recent chat turns: ${JSON.stringify(request.chatHistory ?? []).slice(0, 10000)}
+Approved context: ${approved}
+Be concise, supportive, accurate, and suited to the stated level. If the student asks for help with a real application essay or document, offer practice with a fictional example instead.
+JSON keys: tutorReply.`;
+  }
   if (request.action === 'start') {
-    return `Create one ${request.skill} exercise in ${request.languageName} at ${request.level} for scenario ${request.scenario}.
+    const skillInstructions = request.skill === 'reading'
+      ? 'Write a fresh short passage of 70–120 words entirely in the target language, then ask one comprehension question whose answer is supported by the passage. Keep the passage in stimulus and the instruction/question in prompt.'
+      : request.skill === 'listening'
+      ? 'Write a fresh, natural spoken script of 45–80 words entirely in the target language, then ask one listening-comprehension question whose answer is supported by the script. Put the script in stimulus; the client will play it as audio and hide its text until after the answer.'
+      : request.skill === 'speaking'
+      ? 'Give one specific, engaging speaking topic and a clear short prompt in the target language. Do not ask the learner to type instead of speak.'
+      : 'Create one concrete, level-appropriate task with a clear response format.';
+    const avoid = request.prompt?.trim()
+      ? `Do not repeat this previous prompt or passage; choose a different situation and wording: ${request.prompt.slice(0, 4000)}`
+      : 'Choose a varied, specific task rather than a generic “describe your day” prompt.';
+    return `Create one fresh ${request.skill} exercise in ${request.languageName} at ${request.level} for scenario ${request.scenario}.
+${skillInstructions}
+${avoid}
 Approved context: ${approved}
 JSON keys: prompt, stimulus, tutorReply.
-stimulus is required for listening and reading. tutorReply is the first conversational line when skill is conversation. Otherwise leave tutorReply empty.
+tutorReply is the first conversational line when skill is conversation. Otherwise leave tutorReply empty.
 Do not include real application materials.`;
   }
   return `Evaluate this ${request.skill} practice in ${request.languageName} at ${request.level} for scenario ${request.scenario}.
@@ -138,6 +174,11 @@ export class LanguageCoach {
     ]);
     const parsed = extractJson(raw);
     if (!parsed) throw new ProviderError('invalid_response');
+    if (request.action === 'chat') {
+      const tutorReply = textField(parsed.tutorReply);
+      if (!tutorReply) throw new ProviderError('invalid_response');
+      return { tutorReply, aiAvailable: true };
+    }
     if (request.action === 'start') {
       const prompt = textField(parsed.prompt);
       if (!prompt) throw new ProviderError('invalid_response');
@@ -171,9 +212,9 @@ export async function defaultStudentGate(
 ): Promise<'student' | 'denied' | 'anonymous'> {
   const url = env.SUPABASE_URL?.trim();
   const anon = env.SUPABASE_PUBLISHABLE_KEY?.trim() || env.SUPABASE_ANON_KEY?.trim();
-  // Without Supabase configuration the backend cannot verify callers, so local
-  // development stays open. Once configured, only student bearer tokens pass.
-  if (!url || !anon) return 'anonymous';
+  // Local development may run without auth configuration. A deployed service
+  // must fail closed so public callers cannot use the paid coaching endpoint.
+  if (!url || !anon) return env.NODE_ENV === 'production' ? 'denied' : 'anonymous';
   const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
   if (!token) return 'denied';
   try {
@@ -185,7 +226,7 @@ export async function defaultStudentGate(
     const user = await userResponse.json() as { id?: string };
     if (typeof user.id !== 'string' || !user.id) return 'denied';
     const profileResponse = await transport(
-      `${url.replace(/\/$/, '')}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=role`,
+    `${url.replace(/\/$/, '')}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=role,app_mode`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -195,8 +236,8 @@ export async function defaultStudentGate(
       },
     );
     if (!profileResponse.ok) return 'denied';
-    const rows = await profileResponse.json() as { role?: string }[];
-    return Array.isArray(rows) && rows[0]?.role === 'student' ? 'student' : 'denied';
+    const rows = await profileResponse.json() as { role?: string; app_mode?: string }[];
+    return Array.isArray(rows) && (rows[0]?.role === 'student' || rows[0]?.app_mode === 'personal') ? 'student' : 'denied';
   } catch {
     return 'denied';
   }

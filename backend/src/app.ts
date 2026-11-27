@@ -2,7 +2,7 @@ import cors from 'cors';
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { OrtaAgent } from './agent/orta_agent.js';
-import { ProviderError } from './agent/ai_provider.js';
+import { ProviderError, type GroqProvider } from './agent/ai_provider.js';
 import { registry } from './agent/tool_registry.js';
 import type { AgentRequest } from './types/agent_types.js';
 import { LanguageCoach, defaultStudentGate, validLanguagePracticeRequest } from './language/language_practice.js';
@@ -10,6 +10,28 @@ import { LanguageCoach, defaultStudentGate, validLanguagePracticeRequest } from 
 export interface AppDependencies {
   coach?: LanguageCoach;
   studentGate?: typeof defaultStudentGate;
+  visionAI?: GroqProvider;
+  authGate?: (authorization: string | undefined) => Promise<boolean>;
+}
+
+async function defaultAuthGate(authorization: string | undefined): Promise<boolean> {
+  const url = process.env.SUPABASE_URL?.trim();
+  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    process.env.SUPABASE_ANON_KEY?.trim();
+  if (!url || !publishableKey) return process.env.NODE_ENV !== 'production';
+  const token = authorization?.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+  if (!token) return false;
+  try {
+    const response = await fetch(`${url.replace(/\/$/, '')}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${token}`, apikey: publishableKey },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return false;
+    const user = await response.json() as { id?: string };
+    return typeof user.id === 'string' && user.id.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 const safeErrors = {
@@ -26,9 +48,12 @@ const safeErrors = {
 function trustedOrigin(origin: string): boolean {
   try {
     const url = new URL(origin);
-    return (url.protocol === 'http:' || url.protocol === 'https:') &&
-      (url.hostname === 'localhost' || url.hostname === '127.0.0.1') &&
-      url.origin === origin;
+    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.origin !== origin) return false;
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true;
+    const allowedOrigins = new Set(
+      (process.env.ORTA_ALLOWED_ORIGINS ?? '').split(',').map(value => value.trim()).filter(Boolean),
+    );
+    return allowedOrigins.has(origin);
   } catch { return false; }
 }
 
@@ -78,10 +103,43 @@ export function createApp(agent: OrtaAgent, dependencies: AppDependencies = {}) 
     next();
   });
   app.use(cors({ origin: (origin, callback) => callback(null, origin !== undefined && trustedOrigin(origin)) }));
-  app.use(express.json({ limit: '256kb' }));
+  app.use(express.json({ limit: '10mb' }));
   app.get('/health', (_request, response) => response.json({ status: 'ok' }));
+  app.post('/api/agent/image', async (request, response) => {
+    const requestId = randomUUID();
+    if (!await authGate(request.get('Authorization'))) {
+      return response.status(401).json({ error: 'Sign in to use ORTA AI.', code: 'access_denied', requestId });
+    }
+    const body = request.body;
+    if (!isRecord(body) || typeof body.message !== 'string' || body.message.length > 4000 ||
+        typeof body.mimeType !== 'string' || !/^image\/(?:jpeg|png|webp)$/.test(body.mimeType) ||
+        typeof body.imageBase64 !== 'string' || body.imageBase64.length > 7_000_000 ||
+        (body.locale !== undefined && !['en', 'ru', 'kk'].includes(body.locale as string))) {
+      return response.status(400).json({ error: 'Invalid image request.', code: 'invalid_request', requestId });
+    }
+    const decoded = Buffer.from(body.imageBase64, 'base64');
+    if (!decoded.length || decoded.length > 5_000_000 || decoded.toString('base64') !== body.imageBase64) {
+      return response.status(400).json({ error: 'Image is too large or invalid.', code: 'invalid_request', requestId });
+    }
+    if (!dependencies.visionAI?.configured) {
+      return response.status(503).json({ error: 'Image understanding is not configured.', code: 'not_configured', requestId });
+    }
+    try {
+      const description = await dependencies.visionAI.analyzeImage(body.message, body.mimeType, body.imageBase64, String(body.locale ?? 'en'));
+      console.log(`[${requestId}] image-analysis provider=${dependencies.visionAI.name} model=${dependencies.visionAI.model} success`);
+      return response.json({ description, requestId });
+    } catch (error) {
+      const safe = error instanceof ProviderError ? error : new ProviderError('provider_error');
+      console.error(`[${requestId}] image-analysis ${safe.code} upstreamStatus=${safe.httpStatus ?? 'none'}`);
+      if (safe.retryAfter) response.setHeader('Retry-After', safe.retryAfter);
+      return response.status(safe.code === 'rate_limit' ? 429 : safe.code === 'request_too_large' ? 413 : 503).json({
+        error: safeErrors[safe.code], code: safe.code, requestId,
+      });
+    }
+  });
   const coach = dependencies.coach ?? new LanguageCoach(agent.provider);
   const studentGate = dependencies.studentGate ?? defaultStudentGate;
+  const authGate = dependencies.authGate ?? defaultAuthGate;
   app.post('/api/language/practice', async (request, response) => {
     const requestId = randomUUID();
     const access = await studentGate(request.get('Authorization'));
@@ -106,6 +164,9 @@ export function createApp(agent: OrtaAgent, dependencies: AppDependencies = {}) 
   });
   app.post('/api/agent/message', async (request, response) => {
     const requestId = randomUUID();
+    if (!await authGate(request.get('Authorization'))) {
+      return response.status(401).json({ error: 'Sign in to use ORTA AI.', code: 'access_denied', requestId });
+    }
     if (!validRequest(request.body)) return response.status(400).json({ error: 'Invalid agent request.', code: 'invalid_request', requestId });
     try {
       const body = request.body;
