@@ -202,11 +202,17 @@ class ProjectContext {
 class LanguageContext {
   final String languageCode;
   final String level;
+  final String knownLevel;
+  final bool isKnown;
+  final bool isLearning;
   final String reason;
 
   const LanguageContext({
     required this.languageCode,
     this.level = '',
+    this.knownLevel = '',
+    this.isKnown = false,
+    this.isLearning = true,
     this.reason = '',
   });
 
@@ -215,6 +221,9 @@ class LanguageContext {
   Map<String, dynamic> toJson() => {
     'language': languageCode,
     'level': level,
+    'knownLevel': knownLevel,
+    'isKnown': isKnown,
+    'isLearning': isLearning,
     'reason': reason,
   };
 
@@ -222,6 +231,9 @@ class LanguageContext {
       LanguageContext(
         languageCode: json['language'] as String? ?? 'en',
         level: json['level'] as String? ?? '',
+        knownLevel: json['knownLevel'] as String? ?? '',
+        isKnown: json['isKnown'] as bool? ?? false,
+        isLearning: json['isLearning'] as bool? ?? true,
         reason: json['reason'] as String? ?? '',
       );
 }

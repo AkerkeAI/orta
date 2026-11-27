@@ -2,7 +2,7 @@ import cors from 'cors';
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { OrtaAgent } from './agent/orta_agent.js';
-import { ProviderError } from './agent/ai_provider.js';
+import { ProviderError, type GroqProvider } from './agent/ai_provider.js';
 import { registry } from './agent/tool_registry.js';
 import type { AgentRequest } from './types/agent_types.js';
 import { LanguageCoach, defaultStudentGate, validLanguagePracticeRequest } from './language/language_practice.js';
@@ -10,6 +10,7 @@ import { LanguageCoach, defaultStudentGate, validLanguagePracticeRequest } from 
 export interface AppDependencies {
   coach?: LanguageCoach;
   studentGate?: typeof defaultStudentGate;
+  visionAI?: GroqProvider;
 }
 
 const safeErrors = {
@@ -78,8 +79,37 @@ export function createApp(agent: OrtaAgent, dependencies: AppDependencies = {}) 
     next();
   });
   app.use(cors({ origin: (origin, callback) => callback(null, origin !== undefined && trustedOrigin(origin)) }));
-  app.use(express.json({ limit: '256kb' }));
+  app.use(express.json({ limit: '10mb' }));
   app.get('/health', (_request, response) => response.json({ status: 'ok' }));
+  app.post('/api/agent/image', async (request, response) => {
+    const requestId = randomUUID();
+    const body = request.body;
+    if (!isRecord(body) || typeof body.message !== 'string' || body.message.length > 4000 ||
+        typeof body.mimeType !== 'string' || !/^image\/(?:jpeg|png|webp)$/.test(body.mimeType) ||
+        typeof body.imageBase64 !== 'string' || body.imageBase64.length > 7_000_000 ||
+        (body.locale !== undefined && !['en', 'ru', 'kk'].includes(body.locale as string))) {
+      return response.status(400).json({ error: 'Invalid image request.', code: 'invalid_request', requestId });
+    }
+    const decoded = Buffer.from(body.imageBase64, 'base64');
+    if (!decoded.length || decoded.length > 5_000_000 || decoded.toString('base64') !== body.imageBase64) {
+      return response.status(400).json({ error: 'Image is too large or invalid.', code: 'invalid_request', requestId });
+    }
+    if (!dependencies.visionAI?.configured) {
+      return response.status(503).json({ error: 'Image understanding is not configured.', code: 'not_configured', requestId });
+    }
+    try {
+      const description = await dependencies.visionAI.analyzeImage(body.message, body.mimeType, body.imageBase64, String(body.locale ?? 'en'));
+      console.log(`[${requestId}] image-analysis provider=${dependencies.visionAI.name} model=${dependencies.visionAI.model} success`);
+      return response.json({ description, requestId });
+    } catch (error) {
+      const safe = error instanceof ProviderError ? error : new ProviderError('provider_error');
+      console.error(`[${requestId}] image-analysis ${safe.code} upstreamStatus=${safe.httpStatus ?? 'none'}`);
+      if (safe.retryAfter) response.setHeader('Retry-After', safe.retryAfter);
+      return response.status(safe.code === 'rate_limit' ? 429 : safe.code === 'request_too_large' ? 413 : 503).json({
+        error: safeErrors[safe.code], code: safe.code, requestId,
+      });
+    }
+  });
   const coach = dependencies.coach ?? new LanguageCoach(agent.provider);
   const studentGate = dependencies.studentGate ?? defaultStudentGate;
   app.post('/api/language/practice', async (request, response) => {

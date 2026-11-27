@@ -18,10 +18,17 @@ abstract class LanguageOrtaStore {
   Future<LanguageSessionResult?> resultFor(String sessionId);
 }
 
-String newLanguageId(String prefix) {
-  final random = Random();
-  final stamp = DateTime.now().toUtc().microsecondsSinceEpoch;
-  return '$prefix-$stamp-${random.nextInt(1 << 32).toRadixString(16)}';
+String newLanguageId() {
+  final random = Random.secure();
+  final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  final hex = bytes
+      .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join();
+  return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+      '${hex.substring(12, 16)}-${hex.substring(16, 20)}-'
+      '${hex.substring(20)}';
 }
 
 class MemoryLanguageSnapshotStore {
@@ -55,17 +62,23 @@ class StudentLanguageOrtaStore implements LanguageOrtaStore {
     LanguageOrtaAccess.assertStudent(role: role, studentId: studentId);
     for (final profile in next.profiles) {
       if (profile.studentId != studentId) {
-        throw const LanguageOrtaDenied('Students can only save their own language data.');
+        throw const LanguageOrtaDenied(
+          'Students can only save their own language data.',
+        );
       }
     }
     for (final session in next.sessions) {
       if (session.studentId != studentId) {
-        throw const LanguageOrtaDenied('Students can only save their own language data.');
+        throw const LanguageOrtaDenied(
+          'Students can only save their own language data.',
+        );
       }
     }
     for (final result in next.results) {
       if (result.studentId != studentId) {
-        throw const LanguageOrtaDenied('Students can only save their own language data.');
+        throw const LanguageOrtaDenied(
+          'Students can only save their own language data.',
+        );
       }
     }
     memory.snapshot = next;
@@ -75,7 +88,10 @@ class StudentLanguageOrtaStore implements LanguageOrtaStore {
     }
   }
 
-  static LanguageOrtaSnapshot loadFromPrefs(SharedPreferences prefs, String key) {
+  static LanguageOrtaSnapshot loadFromPrefs(
+    SharedPreferences prefs,
+    String key,
+  ) {
     final raw = prefs.getString(key);
     if (raw == null || raw.isEmpty) return const LanguageOrtaSnapshot();
     return LanguageOrtaSnapshot.fromJson(
@@ -91,12 +107,13 @@ class StudentLanguageOrtaStore implements LanguageOrtaStore {
   @override
   Future<LanguageProfile> addLanguage(String languageCode) async {
     final existing = _data.profiles.where(
-      (item) => item.studentId == studentId && item.languageCode == languageCode,
+      (item) =>
+          item.studentId == studentId && item.languageCode == languageCode,
     );
     if (existing.isNotEmpty) return existing.first;
     final definition = LanguageDefinition.byCode(languageCode);
     final profile = LanguageProfile(
-      id: newLanguageId('lang'),
+      id: newLanguageId(),
       studentId: studentId,
       languageCode: languageCode,
       languageName: definition.englishName,
@@ -115,11 +132,16 @@ class StudentLanguageOrtaStore implements LanguageOrtaStore {
   @override
   Future<LanguageProfile> saveProfile(LanguageProfile profile) async {
     if (profile.studentId != studentId) {
-      throw const LanguageOrtaDenied('Students can only save their own language data.');
+      throw const LanguageOrtaDenied(
+        'Students can only save their own language data.',
+      );
     }
     final next = [
       for (final item in _data.profiles)
-        if (item.id == profile.id) profile.copyWith(updatedAt: DateTime.now().toUtc()) else item,
+        if (item.id == profile.id)
+          profile.copyWith(updatedAt: DateTime.now().toUtc())
+        else
+          item,
     ];
     if (!next.any((item) => item.id == profile.id)) {
       next.add(profile.copyWith(updatedAt: DateTime.now().toUtc()));
@@ -150,7 +172,9 @@ class StudentLanguageOrtaStore implements LanguageOrtaStore {
     LanguagePracticeSession session,
   ) async {
     if (session.studentId != studentId) {
-      throw const LanguageOrtaDenied('Students can only save their own language data.');
+      throw const LanguageOrtaDenied(
+        'Students can only save their own language data.',
+      );
     }
     final next = [
       for (final item in _data.sessions)
@@ -190,7 +214,9 @@ class StudentLanguageOrtaStore implements LanguageOrtaStore {
   @override
   Future<LanguageSessionResult> saveResult(LanguageSessionResult result) async {
     if (result.studentId != studentId) {
-      throw const LanguageOrtaDenied('Students can only save their own language data.');
+      throw const LanguageOrtaDenied(
+        'Students can only save their own language data.',
+      );
     }
     final next = [
       for (final item in _data.results)
@@ -212,17 +238,18 @@ class StudentLanguageOrtaStore implements LanguageOrtaStore {
   @override
   Future<LanguageSessionResult?> resultFor(String sessionId) async {
     return _data.results
-        .where((item) => item.studentId == studentId && item.sessionId == sessionId)
+        .where(
+          (item) => item.studentId == studentId && item.sessionId == sessionId,
+        )
         .firstOrNull;
   }
 }
 
 class DeniedLanguageOrtaStore implements LanguageOrtaStore {
   const DeniedLanguageOrtaStore();
-  Never _deny() =>
-      throw const LanguageOrtaDenied(
-        'Language ORTA is available only to authenticated students.',
-      );
+  Never _deny() => throw const LanguageOrtaDenied(
+    'Language ORTA is available only to authenticated students.',
+  );
 
   @override
   Future<LanguageProfile> addLanguage(String languageCode) async => _deny();
@@ -231,8 +258,9 @@ class DeniedLanguageOrtaStore implements LanguageOrtaStore {
   @override
   Future<LanguageSessionResult?> resultFor(String sessionId) async => _deny();
   @override
-  Future<LanguageSessionResult> saveResult(LanguageSessionResult result) async =>
-      _deny();
+  Future<LanguageSessionResult> saveResult(
+    LanguageSessionResult result,
+  ) async => _deny();
   @override
   Future<LanguageProfile> saveProfile(LanguageProfile profile) async => _deny();
   @override
@@ -297,7 +325,9 @@ class SupabaseLanguageOrtaStore implements LanguageOrtaStore {
   @override
   Future<LanguageProfile> saveProfile(LanguageProfile profile) async {
     if (profile.studentId != studentId) {
-      throw const LanguageOrtaDenied('Students can only save their own language data.');
+      throw const LanguageOrtaDenied(
+        'Students can only save their own language data.',
+      );
     }
     final row = await client
         .from('language_profiles')
@@ -334,7 +364,9 @@ class SupabaseLanguageOrtaStore implements LanguageOrtaStore {
     LanguagePracticeSession session,
   ) async {
     if (session.studentId != studentId) {
-      throw const LanguageOrtaDenied('Students can only save their own language data.');
+      throw const LanguageOrtaDenied(
+        'Students can only save their own language data.',
+      );
     }
     final row = await client
         .from('language_practice_sessions')
@@ -379,7 +411,9 @@ class SupabaseLanguageOrtaStore implements LanguageOrtaStore {
   @override
   Future<LanguageSessionResult> saveResult(LanguageSessionResult result) async {
     if (result.studentId != studentId) {
-      throw const LanguageOrtaDenied('Students can only save their own language data.');
+      throw const LanguageOrtaDenied(
+        'Students can only save their own language data.',
+      );
     }
     final row = await client
         .from('language_session_results')

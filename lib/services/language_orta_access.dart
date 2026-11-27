@@ -6,7 +6,8 @@ export '../models/language_orta_models.dart' show LanguageOrtaDenied;
 class LanguageOrtaAccess {
   static const moduleName = 'Language ORTA';
 
-  static bool canOpenRole(String role) => role.trim().toLowerCase() == 'student';
+  static bool canOpenRole(String role, {String mode = 'academy'}) =>
+      mode == 'personal' || role.trim().toLowerCase() == 'student';
 
   static bool canOpen(OrtaRole role) => role == OrtaRole.student;
 
@@ -15,11 +16,11 @@ class LanguageOrtaAccess {
     if (!base.contains(moduleName)) moduleName,
   ];
 
-  static List<String> sectionsForRole(String role, List<String> base) =>
-      canOpenRole(role) ? studentSections(base) : List<String>.from(base);
+  static List<String> sectionsForRole(String role, List<String> base, {String mode = 'academy'}) =>
+      canOpenRole(role, mode: mode) ? studentSections(base) : List<String>.from(base);
 
-  static void assertStudent({required String role, required String studentId}) {
-    if (!canOpenRole(role) || studentId.trim().isEmpty) {
+  static void assertStudent({required String role, required String studentId, String mode = 'academy'}) {
+    if (!canOpenRole(role, mode: mode) || studentId.trim().isEmpty) {
       throw const LanguageOrtaDenied(
         'Language ORTA is available only to authenticated students.',
       );

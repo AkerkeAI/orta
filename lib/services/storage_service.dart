@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -46,11 +47,15 @@ class StorageService implements LifeDataStorage {
 
   @override
   Future<LifeData> loadLifeData() async {
-    final file = await _file();
-    if (await file.exists()) {
-      return LifeData.fromJson(
-        Map<String, dynamic>.from(jsonDecode(await file.readAsString()) as Map),
-      );
+    if (!kIsWeb) {
+      final file = await _file();
+      if (await file.exists()) {
+        return LifeData.fromJson(
+          Map<String, dynamic>.from(
+            jsonDecode(await file.readAsString()) as Map,
+          ),
+        );
+      }
     }
     // Legacy preferences remain untouched for recovery after migration.
     final prefs = await SharedPreferences.getInstance();
@@ -141,6 +146,24 @@ class StorageService implements LifeDataStorage {
     if (utf8.encode(encoded).length > 2000000) {
       throw StateError('Local storage capacity reached');
     }
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final previous = prefs.getString(lifeDataKey);
+      if (previous != null) {
+        // Keep browser data recoverable and never replace a corrupt snapshot.
+        LifeData.fromJson(
+          Map<String, dynamic>.from(jsonDecode(previous) as Map),
+        );
+        if (!await prefs.setString(backupKey, previous)) {
+          throw StateError('Could not back up saved data');
+        }
+      }
+      if (!await prefs.setString(lifeDataKey, encoded)) {
+        throw StateError('Could not save data');
+      }
+      return;
+    }
     final file = await _file();
     if (await file.exists()) {
       final previous = await file.readAsString();
@@ -153,7 +176,7 @@ class StorageService implements LifeDataStorage {
 
   // Compatibility APIs route to the unified snapshot once migration has occurred.
   Future<bool> isOnboardingCompleted() async {
-    if (await (await _file()).exists()) {
+    if (!kIsWeb && await (await _file()).exists()) {
       return (await loadLifeData()).onboardingCompleted;
     }
     return (await SharedPreferences.getInstance()).getBool(
@@ -163,7 +186,7 @@ class StorageService implements LifeDataStorage {
   }
 
   Future<void> setOnboardingCompleted(bool completed) async {
-    if (await (await _file()).exists()) {
+    if (!kIsWeb && await (await _file()).exists()) {
       await saveLifeData(
         (await loadLifeData()).copyWith(onboardingCompleted: completed),
       );
@@ -197,7 +220,7 @@ class StorageService implements LifeDataStorage {
   }
 
   Future<void> saveLifeContext(LifeContext context) async {
-    if (await (await _file()).exists()) {
+    if (!kIsWeb && await (await _file()).exists()) {
       await saveLifeData((await loadLifeData()).copyWith(life: context));
       return;
     }
@@ -210,7 +233,9 @@ class StorageService implements LifeDataStorage {
   }
 
   Future<LifeContext?> getLifeContext() async {
-    if (await (await _file()).exists()) return (await loadLifeData()).life;
+    if (!kIsWeb && await (await _file()).exists()) {
+      return (await loadLifeData()).life;
+    }
     final value = (await SharedPreferences.getInstance()).getString(
       _lifeContextKey,
     );
@@ -231,6 +256,7 @@ class StorageService implements LifeDataStorage {
     ]) {
       await prefs.remove(key);
     }
+    if (kIsWeb) return;
     final file = await _file();
     for (final path in [
       file.path,

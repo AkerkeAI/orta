@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color primaryColor = Color(0xFF00A991);
-  static const Color lightBackground = Color(0xFFF4F8F7);
+  static const Color primaryColor = Color(0xFF403B9D);
+  static const Color secondaryColor = Color(0xFFCA7D43);
+  static const Color lightBackground = Color(0xFFF8F7FC);
   static const Color cardBackground = Color(0xFFFFFFFF);
-  static const Color textPrimary = Color(0xFF18313A);
-  static const Color textSecondary = Color(0xFF71838A);
-  static const Color dividerColor = Color(0xFFE5EEEC);
+  static const Color textPrimary = Color(0xFF24233A);
+  static const Color textSecondary = Color(0xFF77758D);
+  static const Color dividerColor = Color(0xFFECE8E3);
 
   static ThemeData get lightTheme {
     return ThemeData(
@@ -15,7 +16,7 @@ class AppTheme {
         seedColor: primaryColor,
         brightness: Brightness.light,
         primary: primaryColor,
-        secondary: primaryColor,
+        secondary: secondaryColor,
         surface: cardBackground,
         surfaceContainer: lightBackground,
       ),
@@ -93,6 +94,12 @@ class AppTheme {
         unselectedItemColor: textSecondary,
         type: BottomNavigationBarType.fixed,
         elevation: 8,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: const Color(0xFF292660),
+        contentTextStyle: const TextStyle(color: Colors.white),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
   }

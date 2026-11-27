@@ -26,10 +26,16 @@ const _ortaSandInk = Color(0xFF965C31);
 const _ortaInk = Color(0xFF24233A);
 const _ortaMuted = Color(0xFF77758D);
 const _ortaAuthRedirectUri = 'com.example.orta://login-callback';
+const _defaultSupabaseUrl = 'https://gjjayhhumqmkcauxbpmg.supabase.co';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  const configuredSupabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  final supabaseUrl = configuredSupabaseUrl.isEmpty ||
+          configuredSupabaseUrl.contains('ВАШ_SUPABASE_URL') ||
+          configuredSupabaseUrl.contains('<your_supabase_url>')
+      ? _defaultSupabaseUrl
+      : configuredSupabaseUrl;
   const supabaseKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
   if (supabaseUrl.isNotEmpty && supabaseKey.isNotEmpty) {
     await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseKey);

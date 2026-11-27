@@ -246,6 +246,8 @@ String planningText(Language language, String key) {
       'Сегодняшние события',
       'Бүгінгі міндеттер',
     ],
+    'taskDueToday': ['Task due today', 'Задача на сегодня', 'Бүгінгі тапсырма'],
+    'openTasks': ['Open tasks', 'Активные задачи', 'Белсенді тапсырмалар'],
     'empty': [
       'No saved commitments for this period',
       'В этом периоде нет сохранённых событий',
