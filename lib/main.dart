@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -6,6 +9,7 @@ import 'app/orta_app.dart';
 import 'app/theme/app_theme.dart';
 import 'models/language.dart';
 import 'models/language_orta_models.dart';
+import 'screens/auth/password_recovery_page.dart';
 import 'screens/language_orta/language_orta_workspace.dart';
 import 'services/language_orta_access.dart';
 import 'services/language_orta_store.dart';
@@ -21,6 +25,7 @@ const _ortaVioletDeep = Color(0xFF292660);
 const _ortaSandInk = Color(0xFF965C31);
 const _ortaInk = Color(0xFF24233A);
 const _ortaMuted = Color(0xFF77758D);
+const _ortaAuthRedirectUri = 'com.example.orta://login-callback';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -88,6 +93,32 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
   String? _loadedUserId;
   Map<String, dynamic>? _loadedProfile;
   int _profileLoadAttempt = 0;
+  bool _showPasswordRecovery = false;
+  StreamSubscription<AuthState>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_supabaseConfigured) {
+      _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen(
+        (state) {
+          if (!mounted) return;
+          if (state.event == AuthChangeEvent.passwordRecovery) {
+            setState(() => _showPasswordRecovery = true);
+          } else if (state.event == AuthChangeEvent.signedOut) {
+            setState(() => _showPasswordRecovery = false);
+          }
+        },
+        onError: (Object _) {},
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
 
   void _syncLocale(Locale? locale) {
     if (locale == null) return;
@@ -101,6 +132,17 @@ class _AdmissionsEntryState extends State<_AdmissionsEntry> {
   @override
   Widget build(BuildContext context) {
     if (!_supabaseConfigured) return const _ConfigurationRequired();
+    if (_showPasswordRecovery) {
+      final auth = Supabase.instance.client.auth;
+      return PasswordRecoveryPage(
+        onPasswordUpdated: (password) async {
+          await auth.updateUser(UserAttributes(password: password));
+        },
+        onReturnToSignIn: () async {
+          await auth.signOut(scope: SignOutScope.global);
+        },
+      );
+    }
     return StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
@@ -328,7 +370,7 @@ class _SignInPageState extends State<_SignInPage> {
       if (_register) {
         if (widget.product == 'personal') {
           await auth.signUp(email: _email.text.trim(), password: _password.text,
-            emailRedirectTo: Uri.base.scheme.startsWith('http') ? Uri.base.origin : null,
+            emailRedirectTo: kIsWeb ? Uri.base.origin : _ortaAuthRedirectUri,
             data: {'full_name': _name.text.trim(), 'app_mode': 'personal', 'interface_language': _interfaceLanguage.code});
           if (mounted) setState(() => _message = _strings.text('checkEmail'));
           return;
@@ -336,10 +378,7 @@ class _SignInPageState extends State<_SignInPage> {
         await auth.signUp(
           email: _email.text.trim(),
           password: _password.text,
-          emailRedirectTo:
-              Uri.base.scheme == 'http' || Uri.base.scheme == 'https'
-              ? Uri.base.origin
-              : null,
+          emailRedirectTo: kIsWeb ? Uri.base.origin : _ortaAuthRedirectUri,
           data: {
             'full_name': _name.text.trim(),
             'invite_code': _invite.text.trim(),
@@ -371,8 +410,13 @@ class _SignInPageState extends State<_SignInPage> {
     if (email.isEmpty) { setState(() => _message = 'Enter your email first to receive a reset link.'); return; }
     setState(() { _busy = true; _message = null; });
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: kIsWeb ? Uri.base.origin : _ortaAuthRedirectUri,
+      );
       if (mounted) setState(() => _message = 'If an account exists for this email, a reset link has been sent.');
+    } on AuthException catch (error) {
+      if (mounted) setState(() => _message = error.message);
     } catch (_) { if (mounted) setState(() => _message = _strings.text('connectionError')); }
     finally { if (mounted) setState(() => _busy = false); }
   }
