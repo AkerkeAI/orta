@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/life_context.dart';
 import '../models/language.dart';
@@ -27,6 +28,17 @@ class RemoteOrtaAgentService implements OrtaAgentService {
     this.timeout = const Duration(seconds: 75),
   }) : client = client ?? http.Client();
 
+  Map<String, String> get _requestHeaders {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    try {
+      final token = Supabase.instance.client.auth.currentSession?.accessToken;
+      if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+    } catch (_) {
+      // The backend rejects unauthenticated requests; this keeps local setup errors clear.
+    }
+    return headers;
+  }
+
   Future<String> analyzeImage({
     required Uint8List bytes,
     required String mimeType,
@@ -37,7 +49,7 @@ class RemoteOrtaAgentService implements OrtaAgentService {
       final response = await client
           .post(
             Uri.parse('$baseUrl/api/agent/image'),
-            headers: const {'Content-Type': 'application/json'},
+            headers: _requestHeaders,
             body: jsonEncode({
               'message': message,
               'mimeType': mimeType,
@@ -92,7 +104,7 @@ class RemoteOrtaAgentService implements OrtaAgentService {
       final response = await client
           .post(
             Uri.parse('$baseUrl/api/agent/message'),
-            headers: const {'Content-Type': 'application/json'},
+            headers: _requestHeaders,
             body: jsonEncode({
               'message': message,
               'locale': context.relevantLifeContext.interfaceLanguage.code,
@@ -157,7 +169,7 @@ class RemoteOrtaAgentService implements OrtaAgentService {
       final response = await client
           .post(
             Uri.parse('$baseUrl/api/agent/message'),
-            headers: {'Content-Type': 'application/json'},
+            headers: _requestHeaders,
             body: jsonEncode({
               'message': message,
               'locale': context.relevantLifeContext.interfaceLanguage.code,

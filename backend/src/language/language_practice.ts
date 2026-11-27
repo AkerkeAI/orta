@@ -212,9 +212,9 @@ export async function defaultStudentGate(
 ): Promise<'student' | 'denied' | 'anonymous'> {
   const url = env.SUPABASE_URL?.trim();
   const anon = env.SUPABASE_PUBLISHABLE_KEY?.trim() || env.SUPABASE_ANON_KEY?.trim();
-  // Without Supabase configuration the backend cannot verify callers, so local
-  // development stays open. Once configured, only student bearer tokens pass.
-  if (!url || !anon) return 'anonymous';
+  // Local development may run without auth configuration. A deployed service
+  // must fail closed so public callers cannot use the paid coaching endpoint.
+  if (!url || !anon) return env.NODE_ENV === 'production' ? 'denied' : 'anonymous';
   const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
   if (!token) return 'denied';
   try {

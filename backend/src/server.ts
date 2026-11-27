@@ -16,8 +16,9 @@ const research = new WebResearch();
 const researchAI = createProvider({...process.env, GROQ_MODEL: process.env.GROQ_RESEARCH_MODEL || 'openai/gpt-oss-20b'});
 const agent = new OrtaAgent(provider, research, researchAI);
 const visionAI = new GroqProvider(process.env.GROQ_API_KEY, process.env.GROQ_VISION_MODEL || 'qwen/qwen3.8-27b');
-createApp(agent, { visionAI }).listen(port, '127.0.0.1', () => {
-  console.log(`ORTA backend listening on http://127.0.0.1:${port}`);
+const host = process.env.HOST ?? '0.0.0.0';
+createApp(agent, { visionAI }).listen(port, host, () => {
+  console.log(`ORTA backend listening on http://${host}:${port}`);
   console.log(`Research provider: ${research.provider.name}; configured: ${'configured' in research.provider ? (research.provider.configured ? 'yes' : 'no') : 'no key required'}; public web only`);
   console.log(`Research synthesis model: ${researchAI.model}`);
   console.log(`AI provider: ${provider.name}; model: ${provider.model}`);

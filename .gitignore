@@ -42,6 +42,7 @@ backend/.env.*
 !.env.example
 
 # Node dependencies and build output
+**/dist/
 **/node_modules/
 landing/dist/
 .vercel/
